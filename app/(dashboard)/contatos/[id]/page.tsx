@@ -1,6 +1,4 @@
-export default function ContactDetailPage({
-  params: _params,
-}: {
+export default function ContactDetailPage(_props: {
   params: Promise<{ id: string }>;
 }) {
   return (

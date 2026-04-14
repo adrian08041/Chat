@@ -1,6 +1,4 @@
-export default function ConversationDetailPage({
-  params: _params,
-}: {
+export default function ConversationDetailPage(_props: {
   params: Promise<{ id: string }>;
 }) {
   return (
