@@ -1,5 +1,5 @@
 export default function ConversationDetailPage({
-  params,
+  params: _params,
 }: {
   params: Promise<{ id: string }>;
 }) {

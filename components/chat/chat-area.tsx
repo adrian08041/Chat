@@ -179,7 +179,7 @@ export function ChatArea({ conversation, messages }: ChatAreaProps) {
           backgroundColor: "var(--surface-bg)",
         }}
       >
-        {(messagesWithSeparators as { type: string; label?: string; key?: string; msg?: Message }[]).map((item, i) => {
+        {(messagesWithSeparators as { type: string; label?: string; key?: string; msg?: Message }[]).map((item) => {
           if (item.type === "separator") {
             return <DateSeparator key={item.key} label={item.label!} />;
           }

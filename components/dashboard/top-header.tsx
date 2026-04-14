@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import Image from "next/image";
 import { Search, Bell } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
@@ -32,10 +33,13 @@ export function TopHeader() {
     <header className="grid grid-cols-3 items-center px-6 py-4 border-b border-border-default bg-surface-card flex-shrink-0">
       <h1 className="font-headline text-xl font-bold text-txt-primary">{title}</h1>
       <div className="flex justify-center">
-        <img
+        <Image
           src="/logo.png"
           alt="Adrilo"
-          className="h-14 object-contain"
+          width={180}
+          height={56}
+          className="h-14 w-auto object-contain"
+          priority
         />
       </div>
       <div className="flex items-center gap-4 justify-end">

@@ -1,5 +1,5 @@
 export default function ContactDetailPage({
-  params,
+  params: _params,
 }: {
   params: Promise<{ id: string }>;
 }) {
