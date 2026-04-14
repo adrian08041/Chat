@@ -1,0 +1,153 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: 20
+
+jobs:
+  # ── Lint & Formatação ──
+  lint:
+    name: Lint & Formatação
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: ESLint (core-web-vitals + typescript)
+        run: npm run lint -- --max-warnings 0
+
+  # ── Verificação de Tipos ──
+  typecheck:
+    name: TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verificação de tipos (strict mode)
+        run: npx tsc --noEmit
+
+  # ── Build de Produção ──
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build de produção (Next.js)
+        run: npm run build
+
+      - name: Verificar tamanho do bundle
+        run: |
+          echo "## Tamanho do Build" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          du -sh .next/ 2>/dev/null || true
+          du -sh .next/static/ 2>/dev/null || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # ── Segurança ──
+  security:
+    name: Auditoria de Segurança
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verificar vulnerabilidades (audit)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: Verificar dependências desatualizadas
+        run: npm outdated || true
+
+  # ── Qualidade do Código ──
+  code-quality:
+    name: Qualidade do Código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verificar imports não utilizados
+        run: |
+          echo "Verificando imports não utilizados..."
+          npx tsc --noEmit --noUnusedLocals --noUnusedParameters 2>&1 || true
+
+      - name: Verificar arquivos grandes (>500 linhas)
+        run: |
+          echo "## Arquivos grandes (>500 linhas)" >> $GITHUB_STEP_SUMMARY
+          find app components lib stores types -name '*.ts' -o -name '*.tsx' | while read f; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 500 ]; then
+              echo "⚠️  $f ($lines linhas)" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          echo "Verificação concluída" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verificar "use client" desnecessário
+        run: |
+          echo "## Componentes com 'use client' sem hooks" >> $GITHUB_STEP_SUMMARY
+          find app components -name '*.tsx' | while read f; do
+            if head -1 "$f" | grep -q '"use client"'; then
+              if ! grep -qE 'use(State|Effect|Ref|Memo|Callback|Context|Reducer|Pathname|Router|SearchParams|Store)' "$f"; then
+                echo "⚠️  $f — tem 'use client' mas não usa hooks" >> $GITHUB_STEP_SUMMARY
+              fi
+            fi
+          done
+          echo "Verificação concluída" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verificar tokens do design system (cores hardcoded)
+        run: |
+          echo "## Cores hardcoded fora do design system" >> $GITHUB_STEP_SUMMARY
+          VIOLATIONS=$(grep -rn --include='*.tsx' -E 'bg-\[#|text-\[#|border-\[#' app/ components/ || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "$VIOLATIONS" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            echo "⚠️  Use tokens do design system em vez de cores hardcoded" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ Nenhuma cor hardcoded encontrada" >> $GITHUB_STEP_SUMMARY
+          fi
