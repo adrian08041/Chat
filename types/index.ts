@@ -14,4 +14,8 @@ export type {
   DashboardOverview,
   ConversationsByInstance,
   ConversationsByAgent,
+  KpiCardData,
+  VendedorData,
+  ChartDataPoint,
 } from "./report";
+export type { InternalNote } from "./note";

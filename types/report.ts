@@ -22,3 +22,25 @@ export interface ConversationsByAgent {
   resolvedCount: number;
   avgResponseTime: number | null;
 }
+
+export interface KpiCardData {
+  label: string;
+  value: string;
+  change: string;
+  trend: "up" | "down";
+  trendIsPositive: boolean;
+  icon: "conversations" | "clock" | "check" | "user-plus";
+}
+
+export interface VendedorData {
+  nome: string;
+  atendimentos: number;
+  tempoMedio: string;
+  conversoes: number;
+  taxa: number;
+}
+
+export interface ChartDataPoint {
+  date: string;
+  conversas: number;
+}

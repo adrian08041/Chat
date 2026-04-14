@@ -50,6 +50,12 @@
   /* ── Semânticas ── */
   --color-danger: #D94F3A;
   --color-danger-light: #fdecea;
+  --color-success: #4CAF50;
+  --color-success-light: #E8F5E9;
+  --color-warning: #F59E0B;
+  --color-warning-light: #FFF3E0;
+  --color-info: #2196F3;
+  --color-info-light: #E3F2FD;
 
   /* ── Superfícies ── */
   --surface-bg: #eef0f3;
@@ -213,6 +219,12 @@
   /* ── Cores: Semânticas ── */
   --color-danger: var(--color-danger);
   --color-danger-light: var(--color-danger-light);
+  --color-success: var(--color-success);
+  --color-success-light: var(--color-success-light);
+  --color-warning: var(--color-warning);
+  --color-warning-light: var(--color-warning-light);
+  --color-info: var(--color-info);
+  --color-info-light: var(--color-info-light);
 
   /* ── Cores: Superfície ── */
   --color-surface-bg: var(--surface-bg);
