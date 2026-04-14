@@ -341,6 +341,11 @@ body {
     @apply border-border outline-ring/50;
   }
 
+  button,
+  [role="button"] {
+    cursor: pointer;
+  }
+
   body {
     @apply bg-background text-foreground;
   }

@@ -5,11 +5,8 @@ import {
   UserPlus,
   TrendingUp,
   TrendingDown,
-  Search,
-  Bell,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { DashboardChart } from "@/components/dashboard/dashboard-chart";
 import { MOCK_KPI_CARDS, MOCK_CHART_DATA, MOCK_VENDEDORES } from "@/lib/mock-data";
@@ -99,76 +96,41 @@ function VendedorRow({
 
 export default function DashboardPage() {
   return (
-    <div className="flex-1 overflow-y-auto">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-4 border-b border-border-default bg-surface-card">
-        <h1 className="font-headline text-xl font-bold text-txt-primary">Dashboard</h1>
-        <div className="flex items-center gap-4">
-          <div className="hidden sm:block">
-            <InputGroup className="w-56 bg-surface-elevated">
-              <InputGroupAddon>
-                <Search className="w-4 h-4" />
-              </InputGroupAddon>
-              <InputGroupInput
-                placeholder="Buscar..."
-                aria-label="Buscar no dashboard"
-              />
-            </InputGroup>
-          </div>
-          <button
-            className="relative w-9 h-9 rounded-lg flex items-center justify-center hover:bg-surface-elevated transition-colors"
-            aria-label="Notificações"
-          >
-            <Bell className="w-5 h-5 text-txt-muted" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" aria-hidden="true" />
-            <span className="sr-only">Novas notificações</span>
-          </button>
-          <div className="flex items-center gap-2">
-            <div className="hidden sm:block text-right">
-              <p className="text-sm font-medium text-txt-primary leading-tight">Admin User</p>
-              <p className="text-xs text-txt-muted leading-tight">Administrador</p>
+    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {MOCK_KPI_CARDS.map((kpi) => (
+          <KpiCard key={kpi.label} {...kpi} />
+        ))}
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+        {/* Conversas por dia */}
+        <Card className="xl:col-span-3 border-border-default">
+          <CardContent>
+            <DashboardChart data={MOCK_CHART_DATA} />
+          </CardContent>
+        </Card>
+
+        {/* Performance dos Vendedores */}
+        <Card className="xl:col-span-2 border-border-default">
+          <CardContent>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-headline text-base font-semibold text-txt-primary">
+                Performance dos Vendedores
+              </h2>
+              <button className="text-sm font-medium text-primary-600 hover:text-primary-400 transition-colors">
+                Ver todos
+              </button>
             </div>
-            <AvatarInitials name="Admin User" size="md" />
-          </div>
-        </div>
-      </header>
-
-      <div className="p-6 space-y-6">
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-          {MOCK_KPI_CARDS.map((kpi) => (
-            <KpiCard key={kpi.label} {...kpi} />
-          ))}
-        </div>
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-          {/* Conversas por dia */}
-          <Card className="xl:col-span-3 border-border-default">
-            <CardContent>
-              <DashboardChart data={MOCK_CHART_DATA} />
-            </CardContent>
-          </Card>
-
-          {/* Performance dos Vendedores */}
-          <Card className="xl:col-span-2 border-border-default">
-            <CardContent>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-headline text-base font-semibold text-txt-primary">
-                  Performance dos Vendedores
-                </h2>
-                <button className="text-sm font-medium text-primary-600 hover:text-primary-400 transition-colors">
-                  Ver todos
-                </button>
-              </div>
-              <div>
-                {MOCK_VENDEDORES.map((v, i) => (
-                  <VendedorRow key={v.nome} rank={i + 1} vendedor={v} />
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            <div>
+              {MOCK_VENDEDORES.map((v, i) => (
+                <VendedorRow key={v.nome} rank={i + 1} vendedor={v} />
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

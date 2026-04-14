@@ -1,4 +1,5 @@
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
+import { TopHeader } from "@/components/dashboard/top-header";
 
 export default function DashboardLayout({
   children,
@@ -9,6 +10,7 @@ export default function DashboardLayout({
     <div className="flex h-screen overflow-hidden bg-surface-bg">
       <SidebarNav />
       <div className="flex flex-col flex-1 overflow-hidden">
+        <TopHeader />
         {children}
       </div>
     </div>
