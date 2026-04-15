@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Phone, Mail, Globe, Calendar, Clock, User, MessageSquare, Pencil, Trash2, Plus } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { TagBadge } from "@/components/ui/tag-badge";
@@ -69,7 +69,7 @@ function DrawerBody({
   const primeiroContato = contact.createdAt;
   const displayName = contact.name ?? "Contato sem nome";
 
-  const handleAddNota = useCallback(() => {
+  function handleAddNota() {
     const texto = novaNota.trim();
     if (!texto) return;
 
@@ -81,7 +81,7 @@ function DrawerBody({
     };
     setNotas((prev) => [nota, ...prev]);
     setNovaNota("");
-  }, [novaNota]);
+  }
 
   return (
     <>
