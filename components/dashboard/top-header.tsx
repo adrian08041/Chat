@@ -3,7 +3,6 @@
 import { usePathname } from "next/navigation";
 import Image from "next/image";
 import { Search, Bell } from "lucide-react";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 
 const HIDDEN_ROUTES = ["/conversas"];
@@ -43,16 +42,14 @@ export function TopHeader() {
         />
       </div>
       <div className="flex items-center gap-4 justify-end">
-        <div className="hidden sm:block">
-          <InputGroup className="w-56 bg-surface-elevated">
-            <InputGroupAddon>
-              <Search className="w-4 h-4" />
-            </InputGroupAddon>
-            <InputGroupInput
-              placeholder="Buscar..."
-              aria-label="Buscar"
-            />
-          </InputGroup>
+        <div className="hidden sm:block relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-txt-muted" />
+          <input
+            type="text"
+            placeholder="Buscar..."
+            aria-label="Buscar"
+            className="w-56 h-9 pl-10 pr-4 rounded-lg bg-surface-elevated border-none text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-200 transition-all font-body"
+          />
         </div>
         <button
           className="relative w-9 h-9 rounded-lg flex items-center justify-center hover:bg-surface-elevated transition-colors"

@@ -13,3 +13,25 @@ export interface Contact {
   updatedAt: string;
   tags?: Tag[];
 }
+
+export interface ContactTableRow {
+  contact: Contact;
+  responsavel: string;
+  conversasCount: number;
+  ultimoContato: string;
+}
+
+export interface ConversaHistorico {
+  id: string;
+  data: string;
+  descricao: string;
+  atendidoPor: string;
+  duracao: string;
+}
+
+export interface NotaInterna {
+  id: string;
+  autor: string;
+  data: string;
+  conteudo: string;
+}
