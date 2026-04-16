@@ -9,7 +9,7 @@ export type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from ".
 export type { WhatsAppInstance, InstanceStatus, NumberCardData } from "./instance";
 export type { User, UserRole, UserStatus } from "./user";
 export type { Tag } from "./tag";
-export type { QuickReply } from "./quick-reply";
+export type { QuickReply, QuickReplyCategory } from "./quick-reply";
 export type {
   DashboardOverview,
   ConversationsByInstance,

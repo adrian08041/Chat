@@ -5,7 +5,10 @@ import type { Tag } from "@/types/tag";
 import type { KpiCardData, VendedorData, ChartDataPoint } from "@/types/report";
 import type { InternalNote } from "@/types/note";
 import type { NumberCardData } from "@/types/instance";
+import type { QuickReply } from "@/types/quick-reply";
 import { INSTANCE_COLORS } from "@/lib/constants";
+
+export const CURRENT_USER = { id: "u1", name: "Admin User" };
 
 export const MOCK_TAGS: Tag[] = [
   { id: "t1", workspaceId: "w1", name: "Lead Quente", color: "#D94F3A" },
@@ -579,5 +582,87 @@ export const MOCK_NUMBERS: NumberCardData[] = [
     },
     activeConversations: 34,
     assignedAgents: [MOCK_AGENTS[5]],
+  },
+];
+
+// ── Respostas Rápidas ──
+
+export const MOCK_QUICK_REPLIES: QuickReply[] = [
+  {
+    id: "qr1",
+    workspaceId: "w1",
+    shortcut: "saudacao",
+    category: "boas-vindas",
+    title: "Saudação Inicial",
+    content: "Olá {{nome_cliente}}! Seja bem-vindo(a) à nossa plataforma. Como posso ajudá-lo(a) hoje?",
+    mediaUrl: null,
+    mediaType: null,
+    createdAt: "2026-03-10T10:00:00Z",
+  },
+  {
+    id: "qr2",
+    workspaceId: "w1",
+    shortcut: "preco",
+    category: "vendas",
+    title: "Tabela de Preços",
+    content: "Olá! Nossos planos começam em R$ 99/mês para até 3 usuários. Temos também planos Profissional (R$ 299/mês) e Empresarial (R$ 699/mês). Qual atenderia melhor suas necessidades?",
+    mediaUrl: "/placeholder-precos.png",
+    mediaType: "image/png",
+    createdAt: "2026-03-12T14:00:00Z",
+  },
+  {
+    id: "qr3",
+    workspaceId: "w1",
+    shortcut: "horario",
+    category: "suporte",
+    title: "Horário de Atendimento",
+    content: "Nosso horário de atendimento é de segunda a sexta, das 9h às 18h. Aos sábados atendemos das 9h às 13h. Estamos fechados aos domingos e feriados.",
+    mediaUrl: null,
+    mediaType: null,
+    createdAt: "2026-03-14T09:30:00Z",
+  },
+  {
+    id: "qr4",
+    workspaceId: "w1",
+    shortcut: "demo",
+    category: "vendas",
+    title: "Agendar Demonstração",
+    content: "Que ótimo que você tem interesse em conhecer melhor nossa plataforma, {{nome_cliente}}! Podemos agendar uma demonstração gratuita de 30 minutos. Qual seria o melhor dia e horário para você?",
+    mediaUrl: null,
+    mediaType: null,
+    createdAt: "2026-03-16T11:00:00Z",
+  },
+  {
+    id: "qr5",
+    workspaceId: "w1",
+    shortcut: "obrigado",
+    category: "boas-vindas",
+    title: "Agradecimento",
+    content: "Muito obrigado pelo contato, {{nome_cliente}}! Ficamos à disposição para qualquer outra dúvida. Tenha um ótimo dia!",
+    mediaUrl: null,
+    mediaType: null,
+    createdAt: "2026-03-18T16:00:00Z",
+  },
+  {
+    id: "qr6",
+    workspaceId: "w1",
+    shortcut: "suporte-tecnico",
+    category: "suporte",
+    title: "Suporte Técnico",
+    content: "Olá {{nome_cliente}}, entendi sua dificuldade. Para agilizar o atendimento, pode me informar: (1) qual dispositivo está usando, (2) qual navegador e versão, (3) uma descrição detalhada do erro?",
+    mediaUrl: null,
+    mediaType: null,
+    createdAt: "2026-03-20T08:00:00Z",
+  },
+  {
+    id: "qr7",
+    workspaceId: "w1",
+    shortcut: "orcamento",
+    category: "vendas",
+    title: "Envio de Orçamento",
+    content: "Olá {{nome_cliente}}, conforme combinado, segue o orçamento personalizado para o seu negócio. Fico à disposição para esclarecer qualquer dúvida e seguir com os próximos passos.",
+    mediaUrl: "/placeholder-orcamento.png",
+    mediaType: "application/pdf",
+    createdAt: "2026-03-22T15:00:00Z",
   },
 ];

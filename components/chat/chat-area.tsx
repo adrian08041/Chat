@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo, useId } from "react";
 import {
   Phone,
   Video,
@@ -15,13 +15,39 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AvatarInitials } from "./avatar-initials";
+import { QuickReplyPopover } from "./quick-reply-popover";
 import { CONVERSATION_STATUS_LABELS, CONVERSATION_STATUS_COLORS } from "@/lib/constants";
+import { MOCK_QUICK_REPLIES } from "@/lib/mock-data";
 import type { Conversation } from "@/types/conversation";
 import type { Message } from "@/types/message";
+import type { QuickReply } from "@/types/quick-reply";
+
+const QUICK_REPLY_PATTERN = /(?:^|\s)(\/[a-z0-9-]*)$/i;
+
+function findQuickReplyTrigger(value: string): { slashIndex: number; query: string } | null {
+  const match = value.match(QUICK_REPLY_PATTERN);
+  if (!match || match.index === undefined) return null;
+  const slashToken = match[1];
+  return {
+    slashIndex: value.length - slashToken.length,
+    query: slashToken.slice(1).toLowerCase(),
+  };
+}
+
+function filterQuickReplies(query: string, replies: QuickReply[]): QuickReply[] {
+  if (!query) return replies;
+  return replies.filter(
+    (r) =>
+      r.shortcut.toLowerCase().startsWith(query) ||
+      r.title.toLowerCase().includes(query)
+  );
+}
 
 interface ChatAreaProps {
   conversation: Conversation | null;
   messages: Message[];
+  assigneeName: string;
+  onSendMessage: (content: string) => void;
 }
 
 function formatMessageTime(dateStr: string): string {
@@ -68,22 +94,89 @@ function DateSeparator({ label }: { label: string }) {
   );
 }
 
-export function ChatArea({ conversation, messages }: ChatAreaProps) {
+export function ChatArea({ conversation, messages, assigneeName, onSendMessage }: ChatAreaProps) {
   const [inputValue, setInputValue] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [dismissed, setDismissed] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listboxId = useId();
+  const optionIdPrefix = useId();
+
+  const trigger = findQuickReplyTrigger(inputValue);
+  const triggerActive = trigger !== null;
+  const matches = useMemo(
+    () => (trigger ? filterQuickReplies(trigger.query, MOCK_QUICK_REPLIES) : []),
+    [trigger]
+  );
+  const popoverOpen = triggerActive && matches.length > 0 && !dismissed;
+  const clampedActiveIndex =
+    matches.length > 0 ? Math.min(activeIndex, matches.length - 1) : 0;
+  const activeOptionId = popoverOpen
+    ? `${optionIdPrefix}-${clampedActiveIndex}`
+    : undefined;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value);
+    setActiveIndex(0);
+    setDismissed(false);
+  };
+
+  const handleInputFocus = () => setDismissed(false);
+  const handleInputBlur = () => setDismissed(true);
+
+  const handleSelectReply = (reply: QuickReply) => {
+    if (!trigger) return;
+    const before = inputValue.slice(0, trigger.slashIndex);
+    const next = before + reply.content;
+    setInputValue(next);
+    setActiveIndex(0);
+    setDismissed(false);
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.length, next.length);
+    });
+  };
+
   const handleSend = () => {
     const text = inputValue.trim();
     if (!text) return;
-    // TODO: integrar com API de envio de mensagens
+    onSendMessage(text);
     setInputValue("");
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (popoverOpen) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setActiveIndex((i) => (i + 1) % matches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setActiveIndex((i) => (i - 1 + matches.length) % matches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        handleSelectReply(matches[clampedActiveIndex]);
+        return;
+      }
+    }
+
+    if (triggerActive && trigger && e.key === "Escape") {
+      e.preventDefault();
+      setInputValue(inputValue.slice(0, trigger.slashIndex));
+      setDismissed(false);
+      return;
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -111,7 +204,6 @@ export function ChatArea({ conversation, messages }: ChatAreaProps) {
   const contactName = conversation.contact?.name ?? conversation.contact?.phone ?? "Contato";
   const contactPhone = conversation.contact?.phone ?? "";
   const statusLabel = CONVERSATION_STATUS_LABELS[conversation.status] ?? conversation.status;
-  const assigneeName = conversation.assignedUser?.name ?? "Não atribuído";
 
   // Agrupar mensagens por data para date separators dinâmicos
   const messagesWithSeparators: { type: "separator"; label: string; key: string }[] | { type: "message"; msg: Message }[] = [];
@@ -243,14 +335,32 @@ export function ChatArea({ conversation, messages }: ChatAreaProps) {
           </button>
           <div className="flex-1 relative">
             <input
+              ref={inputRef}
               type="text"
-              placeholder="Escreva uma mensagem"
+              role="combobox"
+              placeholder="Escreva uma mensagem (digite / para respostas rápidas)"
               aria-label="Mensagem"
+              aria-autocomplete="list"
+              aria-expanded={popoverOpen}
+              aria-controls={listboxId}
+              aria-activedescendant={activeOptionId}
               value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onFocus={handleInputFocus}
+              onBlur={handleInputBlur}
               className="w-full h-11 px-4 rounded-xl bg-surface-elevated border-none text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-200 transition-all font-body"
             />
+            {popoverOpen && (
+              <QuickReplyPopover
+                listboxId={listboxId}
+                optionIdPrefix={optionIdPrefix}
+                matches={matches}
+                activeIndex={clampedActiveIndex}
+                onSelect={handleSelectReply}
+                onHoverIndex={setActiveIndex}
+              />
+            )}
           </div>
           {inputValue.trim() ? (
             <button

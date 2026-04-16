@@ -32,3 +32,9 @@ export const USER_ROLE_LABELS: Record<string, string> = {
 };
 
 export const APP_NAME = "WhatsApp Platform";
+
+export const QUICK_REPLY_CATEGORIES = [
+  { key: "boas-vindas", label: "Boas-vindas", color: "#3B82F6" },
+  { key: "vendas", label: "Vendas", color: "#10B981" },
+  { key: "suporte", label: "Suporte", color: "#F59E0B" },
+] as const;

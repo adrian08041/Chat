@@ -6,6 +6,8 @@ import { Search, Upload, Download, Plus, MessageSquare, Trash2 } from "lucide-re
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { TagBadge } from "@/components/ui/tag-badge";
 import { ContactProfileDrawer } from "@/components/contacts/contact-profile-drawer";
+import { NewContactSheet } from "@/components/contacts/new-contact-sheet";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { formatRelativeTime } from "@/lib/format";
 import { MOCK_CONTACTS_TABLE, MOCK_TAGS } from "@/lib/mock-data";
 import type { ContactTableRow } from "@/types/contact";
@@ -88,42 +90,6 @@ function ContactRow({ row, onOpenProfile, onStartChat, onDelete }: ContactRowPro
   );
 }
 
-function ConfirmDeleteDialog({
-  contactName,
-  onConfirm,
-  onCancel,
-}: {
-  contactName: string;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} />
-      <div className="relative z-10 bg-surface-card rounded-xl border border-border-default shadow-lg p-6 max-w-sm w-full mx-4">
-        <h3 className="font-headline text-base font-semibold text-txt-primary">Excluir contato</h3>
-        <p className="text-sm text-txt-secondary mt-2">
-          Tem certeza que deseja excluir <strong>{contactName}</strong>? Esta ação não pode ser desfeita.
-        </p>
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={onCancel}
-            className="flex-1 h-10 rounded-lg border border-border-default bg-surface-card text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 h-10 rounded-lg bg-danger text-sm font-medium text-white hover:bg-danger/90 transition-colors"
-          >
-            Excluir
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function ContactsContent() {
   const router = useRouter();
   const [rows, setRows] = useState<ContactTableRow[]>(MOCK_CONTACTS_TABLE);
@@ -131,6 +97,7 @@ export function ContactsContent() {
   const [activeFilter, setActiveFilter] = useState("todos");
   const [selectedRow, setSelectedRow] = useState<ContactTableRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ContactTableRow | null>(null);
+  const [newContactOpen, setNewContactOpen] = useState(false);
 
   const handleOpenProfile = useCallback((row: ContactTableRow) => {
     setSelectedRow(row);
@@ -175,6 +142,12 @@ export function ContactsContent() {
     setDeleteTarget(selectedRow);
   }, [selectedRow]);
 
+  const handleCreateContact = useCallback((row: ContactTableRow) => {
+    setRows((prev) => [row, ...prev]);
+    setNewContactOpen(false);
+    setSelectedRow(row);
+  }, []);
+
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       if (searchTerm.trim()) {
@@ -209,7 +182,10 @@ export function ContactsContent() {
             <Download className="w-4 h-4" />
             Exportar
           </button>
-          <button className="inline-flex items-center gap-2 px-4 h-9 rounded-lg bg-primary-600 text-sm font-medium text-txt-on-primary hover:bg-primary-400 transition-colors">
+          <button
+            onClick={() => setNewContactOpen(true)}
+            className="inline-flex items-center gap-2 px-4 h-9 rounded-lg bg-primary-600 text-sm font-medium text-txt-on-primary hover:bg-primary-400 transition-colors"
+          >
             <Plus className="w-4 h-4" />
             Novo Contato
           </button>
@@ -294,13 +270,28 @@ export function ContactsContent() {
       />
 
       {/* Dialog de confirmação de exclusão */}
-      {deleteTarget && (
-        <ConfirmDeleteDialog
-          contactName={deleteTarget.contact.name ?? "Contato sem nome"}
-          onConfirm={handleConfirmDelete}
-          onCancel={handleCancelDelete}
-        />
-      )}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Excluir contato"
+        description={
+          <>
+            Tem certeza que deseja excluir{" "}
+            <strong>{deleteTarget?.contact.name ?? "Contato sem nome"}</strong>?
+            Esta ação não pode ser desfeita.
+          </>
+        }
+        confirmLabel="Excluir"
+        onConfirm={handleConfirmDelete}
+        onCancel={handleCancelDelete}
+      />
+
+      {/* Sheet de novo contato */}
+      <NewContactSheet
+        open={newContactOpen}
+        existingContacts={rows.map((r) => r.contact)}
+        onClose={() => setNewContactOpen(false)}
+        onCreate={handleCreateContact}
+      />
     </div>
   );
 }

@@ -1,12 +1,22 @@
-import { Phone, Video, MapPin, Calendar, Clock, UserCircle, Plus, ArrowRightLeft, CheckCircle2 } from "lucide-react";
+"use client";
+
+import { useCallback, useState } from "react";
+import { Phone, Video, MapPin, Calendar, Clock, UserCircle, ArrowRightLeft, CheckCircle2 } from "lucide-react";
 import { AvatarInitials } from "./avatar-initials";
+import { TransferConversationSheet } from "./transfer-conversation-sheet";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Contact } from "@/types/contact";
 import type { InternalNote } from "@/types/note";
 
 interface ContactPanelProps {
   contact: Contact | null;
   notes: InternalNote[];
-  assigneeName?: string;
+  assigneeName: string;
+  assignedUserId: string | null;
+  isResolved: boolean;
+  onAddNote: (content: string) => void;
+  onResolveConversation: () => void;
+  onTransferConversation: (agentId: string) => void;
 }
 
 function formatContactDate(dateStr: string): string {
@@ -51,7 +61,36 @@ function InfoRow({
   );
 }
 
-export function ContactPanel({ contact, notes, assigneeName }: ContactPanelProps) {
+export function ContactPanel({
+  contact,
+  notes,
+  assigneeName,
+  assignedUserId,
+  isResolved,
+  onAddNote,
+  onResolveConversation,
+  onTransferConversation,
+}: ContactPanelProps) {
+  const [noteDraft, setNoteDraft] = useState("");
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
+
+  const trimmedNote = noteDraft.trim();
+
+  const handleAddNote = useCallback(() => {
+    if (!trimmedNote) return;
+    onAddNote(trimmedNote);
+    setNoteDraft("");
+  }, [trimmedNote, onAddNote]);
+
+  const handleConfirmResolve = useCallback(() => {
+    setConfirmResolveOpen(false);
+    onResolveConversation();
+  }, [onResolveConversation]);
+
+  const handleCloseTransfer = useCallback(() => setTransferOpen(false), []);
+  const handleCancelResolve = useCallback(() => setConfirmResolveOpen(false), []);
+
   if (!contact) return null;
 
   const tags = contact.tags ?? [];
@@ -103,25 +142,32 @@ export function ContactPanel({ contact, notes, assigneeName }: ContactPanelProps
           <InfoRow icon={MapPin} label="Origem" value={contact.notes ?? "Desconhecida"} />
           <InfoRow icon={Calendar} label="Primeiro contato" value={formatContactDate(contact.createdAt)} />
           <InfoRow icon={Clock} label="Último contato" value={formatRelativeTime(contact.updatedAt)} />
-          <InfoRow icon={UserCircle} label="Atendente responsável" value={assigneeName ?? "Não atribuído"} />
+          <InfoRow icon={UserCircle} label="Atendente responsável" value={assigneeName} />
         </div>
       </div>
 
       <div className="px-5 py-5 flex-1">
-        <div className="flex items-center justify-between mb-4">
-          <h4 className="font-headline font-semibold text-sm text-txt-primary">
-            Notas Internas
-          </h4>
-          <button aria-label="Adicionar nota" className="w-7 h-7 rounded-full bg-primary-600 text-white flex items-center justify-center hover:bg-primary-800 transition-colors">
-            <Plus className="w-4 h-4" />
-          </button>
-        </div>
+        <h4 className="font-headline font-semibold text-sm text-txt-primary mb-4">
+          Notas Internas
+        </h4>
 
         <div className="space-y-3">
-          <textarea
-            placeholder="Adicionar nota interna..."
-            className="w-full h-20 p-3 rounded-xl bg-surface-elevated border border-border-subtle text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-200 resize-none font-body transition-all"
-          />
+          <div className="flex flex-col gap-2">
+            <textarea
+              value={noteDraft}
+              onChange={(e) => setNoteDraft(e.target.value)}
+              placeholder="Adicionar nota interna..."
+              aria-label="Adicionar nota interna"
+              className="w-full h-20 p-3 rounded-xl bg-surface-elevated border border-border-subtle text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none font-body transition-all"
+            />
+            <button
+              onClick={handleAddNote}
+              disabled={!trimmedNote}
+              className="self-end h-9 px-4 rounded-lg bg-primary-600 text-txt-on-primary text-sm font-body font-medium hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Adicionar
+            </button>
+          </div>
 
           {notes.map((note) => (
             <div
@@ -152,15 +198,40 @@ export function ContactPanel({ contact, notes, assigneeName }: ContactPanelProps
       </div>
 
       <div className="px-5 pb-5 space-y-2 flex-shrink-0">
-        <button className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors">
+        <button
+          onClick={() => setTransferOpen(true)}
+          className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors"
+        >
           <ArrowRightLeft className="w-4 h-4" />
           Transferir conversa
         </button>
-        <button className="w-full h-11 rounded-xl bg-primary-600 text-white text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-primary-800 transition-colors">
+        <button
+          onClick={() => setConfirmResolveOpen(true)}
+          disabled={isResolved}
+          className="w-full h-11 rounded-xl bg-primary-600 text-white text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-primary-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
           <CheckCircle2 className="w-4 h-4" />
-          Resolver conversa
+          {isResolved ? "Conversa resolvida" : "Resolver conversa"}
         </button>
       </div>
+
+      <TransferConversationSheet
+        open={transferOpen}
+        currentAssignedUserId={assignedUserId}
+        onClose={handleCloseTransfer}
+        onTransfer={onTransferConversation}
+      />
+
+      <ConfirmDialog
+        open={confirmResolveOpen}
+        title="Marcar como resolvida?"
+        description="A conversa será marcada como resolvida. Você poderá continuar vendo o histórico, mas ela sairá do filtro de conversas abertas."
+        confirmLabel="Resolver"
+        cancelLabel="Cancelar"
+        variant="primary"
+        onConfirm={handleConfirmResolve}
+        onCancel={handleCancelResolve}
+      />
     </div>
   );
 }

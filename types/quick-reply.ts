@@ -1,8 +1,10 @@
+export type QuickReplyCategory = "boas-vindas" | "vendas" | "suporte";
+
 export interface QuickReply {
   id: string;
   workspaceId: string;
   shortcut: string;
-  category: string | null;
+  category: QuickReplyCategory | null;
   title: string;
   content: string;
   mediaUrl: string | null;

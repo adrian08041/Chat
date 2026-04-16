@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { MessageSquare, QrCode, Pencil, UserRound, Plus } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { EditNumberDrawer } from "@/components/numbers/edit-number-drawer";
 import { QrCodeSheet } from "@/components/numbers/qr-code-sheet";
 import { ConnectNumberSheet } from "@/components/numbers/connect-number-sheet";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MOCK_NUMBERS } from "@/lib/mock-data";
 import type { NumberCardData, InstanceStatus } from "@/types/instance";
 
@@ -126,58 +127,6 @@ function NumberCard({
   );
 }
 
-function DisconnectConfirmDialog({
-  data,
-  onConfirm,
-  onCancel,
-}: {
-  data: NumberCardData;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onCancel();
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onCancel]);
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="fixed inset-0 bg-black/30 backdrop-blur-sm" onClick={onCancel} aria-hidden="true" />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="disconnect-dialog-title"
-        className="relative z-10 bg-surface-card rounded-xl border border-border-default shadow-lg p-6 max-w-sm w-full mx-4"
-      >
-        <h3 id="disconnect-dialog-title" className="font-headline text-base font-semibold text-txt-primary">
-          Desconectar número
-        </h3>
-        <p className="text-sm text-txt-secondary mt-2">
-          Tem certeza que deseja desconectar{" "}
-          <strong>{data.instance.name}</strong>? As conversas ativas serão pausadas.
-        </p>
-        <div className="flex gap-3 mt-5">
-          <button
-            onClick={onCancel}
-            className="flex-1 h-10 rounded-lg border border-border-default text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 h-10 rounded-lg bg-danger text-sm font-medium text-white hover:bg-danger/90 transition-colors"
-          >
-            Desconectar
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 export function NumbersContent() {
   const [numbers, setNumbers] = useState(MOCK_NUMBERS);
   const [editTarget, setEditTarget] = useState<NumberCardData | null>(null);
@@ -286,13 +235,20 @@ export function NumbersContent() {
       />
 
       {/* Dialog de confirmação de desconexão */}
-      {disconnectTarget && (
-        <DisconnectConfirmDialog
-          data={disconnectTarget}
-          onConfirm={handleConfirmDisconnect}
-          onCancel={handleCancelDisconnect}
-        />
-      )}
+      <ConfirmDialog
+        open={disconnectTarget !== null}
+        title="Desconectar número"
+        description={
+          <>
+            Tem certeza que deseja desconectar{" "}
+            <strong>{disconnectTarget?.instance.name}</strong>? As conversas
+            ativas serão pausadas.
+          </>
+        }
+        confirmLabel="Desconectar"
+        onConfirm={handleConfirmDisconnect}
+        onCancel={handleCancelDisconnect}
+      />
     </div>
   );
 }
