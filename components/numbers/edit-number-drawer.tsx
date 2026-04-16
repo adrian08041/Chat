@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { X, Plus } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import {
@@ -21,19 +21,10 @@ interface EditNumberDrawerProps {
 }
 
 export function EditNumberDrawer({ data, onClose, onSave }: EditNumberDrawerProps) {
-  const [name, setName] = useState("");
-  const [color, setColor] = useState<string>(INSTANCE_COLORS[0].value);
-  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [name, setName] = useState(() => data?.instance.name ?? "");
+  const [color, setColor] = useState<string>(() => data?.instance.color ?? INSTANCE_COLORS[0].value);
+  const [agents, setAgents] = useState(() => data?.assignedAgents ?? []);
   const [addingAgent, setAddingAgent] = useState(false);
-
-  useEffect(() => {
-    if (data) {
-      setName(data.instance.name);
-      setColor(data.instance.color);
-      setAgents(data.assignedAgents);
-      setAddingAgent(false);
-    }
-  }, [data]);
 
   const availableAgents = MOCK_AGENTS.filter(
     (a) => !agents.some((ag) => ag.id === a.id)

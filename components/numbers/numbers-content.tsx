@@ -265,6 +265,7 @@ export function NumbersContent() {
 
       {/* Drawer de edição */}
       <EditNumberDrawer
+        key={editTarget?.instance.id ?? "none"}
         data={editTarget}
         onClose={handleCloseEdit}
         onSave={handleSaveEdit}
