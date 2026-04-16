@@ -2,8 +2,9 @@
 
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { Search, Bell } from "lucide-react";
-import { AvatarInitials } from "@/components/chat/avatar-initials";
+import { Search } from "lucide-react";
+import { NotificationsMenu } from "@/components/dashboard/notifications-menu";
+import { ProfileMenu } from "@/components/dashboard/profile-menu";
 
 const HIDDEN_ROUTES = ["/conversas"];
 
@@ -37,21 +38,8 @@ export function TopHeader() {
             className="w-56 h-9 pl-10 pr-4 rounded-lg bg-surface-elevated border-none text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-200 transition-all font-body"
           />
         </div>
-        <button
-          className="relative w-9 h-9 rounded-lg flex items-center justify-center hover:bg-surface-elevated transition-colors"
-          aria-label="Notificações"
-        >
-          <Bell className="w-5 h-5 text-txt-muted" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-danger" aria-hidden="true" />
-          <span className="sr-only">Novas notificações</span>
-        </button>
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:block text-right">
-            <p className="text-sm font-medium text-txt-primary leading-tight">Admin User</p>
-            <p className="text-xs text-txt-muted leading-tight">Administrador</p>
-          </div>
-          <AvatarInitials name="Admin User" size="md" />
-        </div>
+        <NotificationsMenu />
+        <ProfileMenu />
       </div>
     </header>
   );

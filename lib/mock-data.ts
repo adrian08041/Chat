@@ -16,6 +16,7 @@ import type { InternalNote } from "@/types/note";
 import type { NumberCardData } from "@/types/instance";
 import type { QuickReply } from "@/types/quick-reply";
 import type { TeamMember } from "@/types/user";
+import type { Notification } from "@/types/notification";
 import { INSTANCE_COLORS } from "@/lib/constants";
 
 export const CURRENT_USER = { id: "u1", name: "Admin User" };
@@ -860,5 +861,70 @@ export const MOCK_TEAM_MEMBERS: TeamMember[] = [
     avatarUrl: null,
     joinedAt: "2026-04-15T15:30:00Z",
     lastActiveAt: null,
+  },
+];
+
+// ── Notificações ──
+
+export const MOCK_NOTIFICATIONS: Notification[] = [
+  {
+    id: "ntf1",
+    type: "CONVERSATION_ASSIGNED",
+    title: "Nova conversa atribuída",
+    description: "Ana Silva foi atribuída a você",
+    createdAt: "2026-04-16T09:15:00Z",
+    read: false,
+    actionUrl: "/conversas?contact=c1",
+    actorName: "Ana Silva",
+  },
+  {
+    id: "ntf2",
+    type: "MENTION",
+    title: "João Santos mencionou você",
+    description: "\"@admin pode dar uma olhada neste caso?\"",
+    createdAt: "2026-04-16T08:45:00Z",
+    read: false,
+    actionUrl: "/conversas?contact=c2",
+    actorName: "João Santos",
+  },
+  {
+    id: "ntf3",
+    type: "NUMBER_DISCONNECTED",
+    title: "Número desconectado",
+    description: "Atendimento MG perdeu conexão com o WhatsApp",
+    createdAt: "2026-04-16T07:30:00Z",
+    read: false,
+    actionUrl: "/numeros",
+    actorName: null,
+  },
+  {
+    id: "ntf4",
+    type: "TEAM_INVITE_ACCEPTED",
+    title: "Convite aceito",
+    description: "Rafael Almeida entrou na equipe como Atendente",
+    createdAt: "2026-04-15T16:20:00Z",
+    read: true,
+    actionUrl: "/configuracoes",
+    actorName: "Rafael Almeida",
+  },
+  {
+    id: "ntf5",
+    type: "NEW_CONTACT",
+    title: "Novo contato capturado",
+    description: "Beatriz Costa adicionada via campanha de marketing",
+    createdAt: "2026-04-15T11:00:00Z",
+    read: true,
+    actionUrl: "/contatos",
+    actorName: "Beatriz Costa",
+  },
+  {
+    id: "ntf6",
+    type: "CONVERSATION_ASSIGNED",
+    title: "Nova conversa atribuída",
+    description: "Pedro Santos foi atribuído a você",
+    createdAt: "2026-04-14T14:05:00Z",
+    read: true,
+    actionUrl: "/conversas?contact=c4",
+    actorName: "Pedro Santos",
   },
 ];

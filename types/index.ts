@@ -19,3 +19,4 @@ export type {
   ChartDataPoint,
 } from "./report";
 export type { InternalNote } from "./note";
+export type { Notification, NotificationType } from "./notification";
