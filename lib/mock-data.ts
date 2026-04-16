@@ -2,10 +2,20 @@ import type { Conversation } from "@/types/conversation";
 import type { Message } from "@/types/message";
 import type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from "@/types/contact";
 import type { Tag } from "@/types/tag";
-import type { KpiCardData, VendedorData, ChartDataPoint } from "@/types/report";
+import type {
+  KpiCardData,
+  VendedorData,
+  ChartDataPoint,
+  ReportKpiCardData,
+  ConversasPorNumeroPoint,
+  MessageVolumePoint,
+  ConversasPorStatusPoint,
+  TopPerformerData,
+} from "@/types/report";
 import type { InternalNote } from "@/types/note";
 import type { NumberCardData } from "@/types/instance";
 import type { QuickReply } from "@/types/quick-reply";
+import type { TeamMember } from "@/types/user";
 import { INSTANCE_COLORS } from "@/lib/constants";
 
 export const CURRENT_USER = { id: "u1", name: "Admin User" };
@@ -420,6 +430,99 @@ export const MOCK_VENDEDORES: VendedorData[] = [
   { nome: "Carla Souza", atendimentos: 87, tempoMedio: "3m 30s", conversoes: 45, taxa: 51.7 },
 ];
 
+// ── Relatórios ──
+
+export const MOCK_REPORT_KPIS: ReportKpiCardData[] = [
+  {
+    label: "Total de Conversas",
+    value: "1.247",
+    change: "+24%",
+    trend: "up",
+    trendIsPositive: true,
+    icon: "conversations",
+  },
+  {
+    label: "Tempo Médio de Resposta",
+    value: "3m 12s",
+    change: "-12%",
+    trend: "down",
+    trendIsPositive: true,
+    icon: "clock",
+  },
+  {
+    label: "Taxa de Resolução",
+    value: "89,2%",
+    change: "+8%",
+    trend: "up",
+    trendIsPositive: true,
+    icon: "check",
+  },
+  {
+    label: "Satisfação do Cliente",
+    value: "4,7",
+    valueSuffix: "/5",
+    change: "+5%",
+    trend: "up",
+    trendIsPositive: true,
+    icon: "star",
+  },
+];
+
+export const MOCK_CONVERSAS_POR_NUMERO: ConversasPorNumeroPoint[] = [
+  { id: "n1", name: "Vendas SP", conversas: 142, color: "var(--color-info)" },
+  { id: "n2", name: "Suporte RJ", conversas: 87, color: "var(--color-warning)" },
+  { id: "n3", name: "Marketing CE", conversas: 56, color: "var(--color-danger)" },
+  { id: "n4", name: "Financeiro SC", conversas: 34, color: "var(--color-success)" },
+  { id: "n5", name: "Parcerias DF", conversas: 23, color: "var(--color-secondary-600)" },
+];
+
+export const MOCK_MESSAGE_VOLUME: MessageVolumePoint[] = [
+  { date: "15 Mar", recebidas: 145, enviadas: 178 },
+  { date: "16 Mar", recebidas: 152, enviadas: 189 },
+  { date: "17 Mar", recebidas: 148, enviadas: 165 },
+  { date: "18 Mar", recebidas: 161, enviadas: 201 },
+  { date: "19 Mar", recebidas: 155, enviadas: 188 },
+  { date: "20 Mar", recebidas: 167, enviadas: 212 },
+  { date: "21 Mar", recebidas: 172, enviadas: 225 },
+  { date: "22 Mar", recebidas: 168, enviadas: 198 },
+  { date: "23 Mar", recebidas: 175, enviadas: 234 },
+  { date: "24 Mar", recebidas: 181, enviadas: 241 },
+  { date: "25 Mar", recebidas: 178, enviadas: 229 },
+  { date: "26 Mar", recebidas: 185, enviadas: 248 },
+  { date: "27 Mar", recebidas: 192, enviadas: 267 },
+  { date: "28 Mar", recebidas: 188, enviadas: 251 },
+  { date: "29 Mar", recebidas: 195, enviadas: 278 },
+  { date: "30 Mar", recebidas: 202, enviadas: 289 },
+  { date: "31 Mar", recebidas: 198, enviadas: 271 },
+  { date: "1 Abr", recebidas: 205, enviadas: 298 },
+  { date: "2 Abr", recebidas: 212, enviadas: 312 },
+  { date: "3 Abr", recebidas: 208, enviadas: 294 },
+  { date: "4 Abr", recebidas: 215, enviadas: 321 },
+  { date: "5 Abr", recebidas: 222, enviadas: 335 },
+  { date: "6 Abr", recebidas: 218, enviadas: 318 },
+  { date: "7 Abr", recebidas: 225, enviadas: 342 },
+  { date: "8 Abr", recebidas: 232, enviadas: 356 },
+  { date: "9 Abr", recebidas: 228, enviadas: 339 },
+  { date: "10 Abr", recebidas: 235, enviadas: 365 },
+  { date: "11 Abr", recebidas: 242, enviadas: 379 },
+  { date: "12 Abr", recebidas: 238, enviadas: 362 },
+  { date: "13 Abr", recebidas: 245, enviadas: 388 },
+];
+
+export const MOCK_CONVERSAS_POR_STATUS: ConversasPorStatusPoint[] = [
+  { id: "s1", name: "Abertas", value: 142, color: "var(--color-info)" },
+  { id: "s2", name: "Resolvidas", value: 289, color: "var(--color-success)" },
+  { id: "s3", name: "Pendentes", value: 56, color: "var(--color-warning)" },
+];
+
+export const MOCK_TOP_PERFORMERS: TopPerformerData[] = [
+  { nome: "Maria Silva", conversas: 142, tempoMedio: "2m 30s", taxaResolucao: 94.3 },
+  { nome: "João Santos", conversas: 128, tempoMedio: "3m 15s", taxaResolucao: 91.2 },
+  { nome: "Ana Costa", conversas: 115, tempoMedio: "2m 45s", taxaResolucao: 88.7 },
+  { nome: "Pedro Lima", conversas: 98, tempoMedio: "4m 10s", taxaResolucao: 85.4 },
+  { nome: "Carla Souza", conversas: 87, tempoMedio: "3m 30s", taxaResolucao: 82.1 },
+];
+
 // ── Contatos: Histórico de conversas ──
 
 export const MOCK_HISTORICO: Record<string, ConversaHistorico[]> = {
@@ -664,5 +767,98 @@ export const MOCK_QUICK_REPLIES: QuickReply[] = [
     mediaUrl: "/placeholder-orcamento.png",
     mediaType: "application/pdf",
     createdAt: "2026-03-22T15:00:00Z",
+  },
+];
+
+// ── Equipe ──
+
+export const MOCK_TEAM_MEMBERS: TeamMember[] = [
+  {
+    id: "u1",
+    workspaceId: "w1",
+    name: "Admin User",
+    email: "admin@plataforma.com",
+    role: "ADMIN",
+    memberStatus: "ACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-01-01T00:00:00Z",
+    lastActiveAt: "2026-04-16T09:30:00Z",
+  },
+  {
+    id: "u2",
+    workspaceId: "w1",
+    name: "Maria Silva",
+    email: "maria.silva@plataforma.com",
+    role: "SUPERVISOR",
+    memberStatus: "ACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-01-08T10:00:00Z",
+    lastActiveAt: "2026-04-16T08:15:00Z",
+  },
+  {
+    id: "u3",
+    workspaceId: "w1",
+    name: "João Santos",
+    email: "joao.santos@plataforma.com",
+    role: "AGENT",
+    memberStatus: "ACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-01-15T09:00:00Z",
+    lastActiveAt: "2026-04-15T18:45:00Z",
+  },
+  {
+    id: "u4",
+    workspaceId: "w1",
+    name: "Ana Costa",
+    email: "ana.costa@plataforma.com",
+    role: "AGENT",
+    memberStatus: "ACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-02-01T14:00:00Z",
+    lastActiveAt: "2026-04-16T07:20:00Z",
+  },
+  {
+    id: "u5",
+    workspaceId: "w1",
+    name: "Pedro Lima",
+    email: "pedro.lima@plataforma.com",
+    role: "SUPERVISOR",
+    memberStatus: "ACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-02-10T11:30:00Z",
+    lastActiveAt: "2026-04-14T16:00:00Z",
+  },
+  {
+    id: "u6",
+    workspaceId: "w1",
+    name: "Carla Souza",
+    email: "carla.souza@plataforma.com",
+    role: "AGENT",
+    memberStatus: "INACTIVE",
+    avatarUrl: null,
+    joinedAt: "2026-02-20T08:00:00Z",
+    lastActiveAt: "2026-03-28T12:00:00Z",
+  },
+  {
+    id: "u7",
+    workspaceId: "w1",
+    name: "Rafael Almeida",
+    email: "rafael.almeida@plataforma.com",
+    role: "AGENT",
+    memberStatus: "PENDING",
+    avatarUrl: null,
+    joinedAt: "2026-04-14T10:00:00Z",
+    lastActiveAt: null,
+  },
+  {
+    id: "u8",
+    workspaceId: "w1",
+    name: "Beatriz Mendes",
+    email: "beatriz.mendes@plataforma.com",
+    role: "AGENT",
+    memberStatus: "PENDING",
+    avatarUrl: null,
+    joinedAt: "2026-04-15T15:30:00Z",
+    lastActiveAt: null,
   },
 ];

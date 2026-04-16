@@ -1,5 +1,6 @@
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { TopHeader } from "@/components/dashboard/top-header";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function DashboardLayout({
   children,
@@ -13,6 +14,7 @@ export default function DashboardLayout({
         <TopHeader />
         {children}
       </div>
+      <Toaster position="top-right" richColors closeButton />
     </div>
   );
 }

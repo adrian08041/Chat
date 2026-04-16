@@ -12,3 +12,17 @@ export interface User {
   status: UserStatus;
   createdAt: string;
 }
+
+export type TeamMemberStatus = "ACTIVE" | "PENDING" | "INACTIVE";
+
+export interface TeamMember {
+  id: string;
+  workspaceId: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  memberStatus: TeamMemberStatus;
+  avatarUrl: string | null;
+  joinedAt: string;
+  lastActiveAt: string | null;
+}
