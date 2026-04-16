@@ -7,16 +7,6 @@ import { AvatarInitials } from "@/components/chat/avatar-initials";
 
 const HIDDEN_ROUTES = ["/conversas"];
 
-const PAGE_TITLES: Record<string, string> = {
-  "/dashboard": "Dashboard",
-  "/contatos": "Contatos",
-  "/numeros": "Números",
-  "/equipe": "Equipe",
-  "/respostas-rapidas": "Respostas Rápidas",
-  "/relatorios": "Relatórios",
-  "/configuracoes": "Configurações",
-};
-
 export function TopHeader() {
   const pathname = usePathname();
 
@@ -24,13 +14,9 @@ export function TopHeader() {
     return null;
   }
 
-  const title = Object.entries(PAGE_TITLES).find(([path]) =>
-    pathname.startsWith(path)
-  )?.[1] ?? "Página";
-
   return (
     <header className="grid grid-cols-3 items-center px-6 py-4 border-b border-border-default bg-surface-card flex-shrink-0">
-      <h1 className="font-headline text-xl font-bold text-txt-primary">{title}</h1>
+      <div />
       <div className="flex justify-center">
         <Image
           src="/logo.png"

@@ -12,3 +12,9 @@ export interface WhatsAppInstance {
   defaultAssignedUserId: string | null;
   createdAt: string;
 }
+
+export interface NumberCardData {
+  instance: WhatsAppInstance;
+  activeConversations: number;
+  assignedAgents: { id: string; name: string }[];
+}

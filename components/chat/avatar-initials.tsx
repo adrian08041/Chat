@@ -10,10 +10,10 @@ const AVATAR_COLORS = [
   "bg-primary-600",
   "bg-secondary-600",
   "bg-tertiary-400",
-  "bg-[#2563EB]",
-  "bg-[#7C3AED]",
-  "bg-[#D97706]",
-  "bg-[#DB2777]",
+  "bg-info",
+  "bg-primary-800",
+  "bg-warning",
+  "bg-danger",
 ];
 
 function getColorFromName(name: string): string {

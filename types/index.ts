@@ -6,7 +6,7 @@ export type {
   MessageStatus,
 } from "./message";
 export type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from "./contact";
-export type { WhatsAppInstance, InstanceStatus } from "./instance";
+export type { WhatsAppInstance, InstanceStatus, NumberCardData } from "./instance";
 export type { User, UserRole, UserStatus } from "./user";
 export type { Tag } from "./tag";
 export type { QuickReply } from "./quick-reply";

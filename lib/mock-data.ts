@@ -4,6 +4,8 @@ import type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from "@
 import type { Tag } from "@/types/tag";
 import type { KpiCardData, VendedorData, ChartDataPoint } from "@/types/report";
 import type { InternalNote } from "@/types/note";
+import type { NumberCardData } from "@/types/instance";
+import { INSTANCE_COLORS } from "@/lib/constants";
 
 export const MOCK_TAGS: Tag[] = [
   { id: "t1", workspaceId: "w1", name: "Lead Quente", color: "#D94F3A" },
@@ -499,3 +501,83 @@ export const MOCK_CONTACT_ORIGENS: Record<string, string> = {
   c7: "Parceiro",
   c8: "Evento",
 };
+
+// ── Números WhatsApp ──
+
+export const MOCK_AGENTS = [
+  { id: "a1", name: "Mariana S." },
+  { id: "a2", name: "João S." },
+  { id: "a3", name: "Ana C." },
+  { id: "a4", name: "Pedro L." },
+  { id: "a5", name: "Carlos S." },
+  { id: "a6", name: "Rafael A." },
+  { id: "a7", name: "Beatriz M." },
+  { id: "a8", name: "Lucas F." },
+];
+
+export const MOCK_NUMBERS: NumberCardData[] = [
+  {
+    instance: {
+      id: "i1",
+      workspaceId: "w1",
+      name: "Vendas SP",
+      phone: "+55 34 9 9999-0001",
+      evolutionInstanceName: "vendas-sp",
+      color: INSTANCE_COLORS[3].value,
+      status: "CONNECTED",
+      qrCode: null,
+      defaultAssignedUserId: "u1",
+      createdAt: "2026-01-01T00:00:00Z",
+    },
+    activeConversations: 142,
+    assignedAgents: [MOCK_AGENTS[0], MOCK_AGENTS[1], MOCK_AGENTS[2]],
+  },
+  {
+    instance: {
+      id: "i2",
+      workspaceId: "w1",
+      name: "Suporte RJ",
+      phone: "+55 21 9 8888-0002",
+      evolutionInstanceName: "suporte-rj",
+      color: INSTANCE_COLORS[5].value,
+      status: "CONNECTED",
+      qrCode: null,
+      defaultAssignedUserId: "u2",
+      createdAt: "2026-01-05T00:00:00Z",
+    },
+    activeConversations: 87,
+    assignedAgents: [MOCK_AGENTS[3], MOCK_AGENTS[4]],
+  },
+  {
+    instance: {
+      id: "i3",
+      workspaceId: "w1",
+      name: "Atendimento MG",
+      phone: "+55 11 9 7777-0003",
+      evolutionInstanceName: "atendimento-mg",
+      color: INSTANCE_COLORS[4].value,
+      status: "DISCONNECTED",
+      qrCode: null,
+      defaultAssignedUserId: null,
+      createdAt: "2026-02-10T00:00:00Z",
+    },
+    activeConversations: 0,
+    assignedAgents: [],
+  },
+  {
+    instance: {
+      id: "i4",
+      workspaceId: "w1",
+      name: "Financeiro SC",
+      phone: "+55 47 9 6666-0004",
+      evolutionInstanceName: "financeiro-sc",
+      color: INSTANCE_COLORS[0].value,
+      status: "CONNECTED",
+      qrCode: null,
+      defaultAssignedUserId: "u3",
+      createdAt: "2026-03-01T00:00:00Z",
+    },
+    activeConversations: 34,
+    assignedAgents: [MOCK_AGENTS[5]],
+  },
+];
