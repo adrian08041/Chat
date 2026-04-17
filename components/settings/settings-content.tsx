@@ -52,26 +52,23 @@ export function SettingsContent() {
   const ActiveComponent = SECTION_COMPONENTS[activeSection] ?? ProfileSection;
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
-      <div className="px-6 py-6 bg-surface-card border-b border-border-default flex-shrink-0">
-        <h1 className="font-headline text-2xl font-bold text-txt-primary">
-          Configurações
-        </h1>
-        <p className="mt-1 text-sm text-txt-secondary">
-          Gerencie as configurações da sua conta e preferências
-        </p>
-      </div>
-
-      <div className="flex flex-1 overflow-hidden">
-        <SettingsNav
-          sections={SECTIONS}
-          activeSection={activeSection}
-          onSelect={setActiveSection}
-        />
-        <main className="flex-1 overflow-y-auto p-6">
-          <ActiveComponent />
-        </main>
-      </div>
+    <div className="flex flex-1 overflow-hidden">
+      <SettingsNav
+        sections={SECTIONS}
+        activeSection={activeSection}
+        onSelect={setActiveSection}
+      />
+      <main className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div>
+          <h2 className="font-headline text-2xl font-bold text-txt-primary">
+            Configurações
+          </h2>
+          <p className="text-sm text-txt-muted mt-1">
+            Gerencie as configurações da sua conta e preferências
+          </p>
+        </div>
+        <ActiveComponent />
+      </main>
     </div>
   );
 }
