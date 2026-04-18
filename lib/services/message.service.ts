@@ -5,7 +5,6 @@
 // Grupo é ignorado (log) no MVP — SAC 1:1 não comporta grupo ainda.
 
 import type {
-  Conversation,
   Instance,
   Message,
   MessageStatus,
