@@ -1,12 +1,21 @@
+import { redirect } from "next/navigation";
+import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { TopHeader } from "@/components/dashboard/top-header";
 import { Toaster } from "@/components/ui/sonner";
 
-export default function DashboardLayout({
+export default async function DashboardLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Defesa em profundidade: proxy.ts já protege, mas o layout checa de novo
+  // caso o matcher do proxy deixe alguma rota passar.
+  const session = await auth();
+  if (!session) {
+    redirect("/login");
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-surface-bg">
       <SidebarNav />

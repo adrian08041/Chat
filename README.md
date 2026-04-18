@@ -1,5 +1,36 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Desenvolvimento local
+
+Pré-requisitos: Node 20+, Docker (Desktop no Windows com integração WSL2 ou daemon nativo).
+
+```bash
+cp .env.example .env         # valores de dev já funcionam como estão
+npm install                  # postinstall roda prisma generate
+npm run db:up                # sobe Postgres 16 em localhost:5433
+npm run db:check             # valida conexão end-to-end
+npm run dev                  # http://localhost:3000
+```
+
+### Scripts de banco
+
+| Script | O que faz |
+|---|---|
+| `npm run db:up` | sobe o container Postgres |
+| `npm run db:down` | derruba o container (volume preservado) |
+| `npm run db:reset` | derruba e apaga o volume (zera dados) |
+| `npm run db:logs` | tail dos logs do Postgres |
+| `npm run db:studio` | abre Prisma Studio em `localhost:5555` |
+| `npm run db:generate` | regenera o Prisma Client |
+| `npm run db:migrate` | cria/aplica migration (passo 2+) |
+| `npm run db:check` | `SELECT 1` via Prisma pra validar stack |
+
+### Troubleshooting WSL
+
+- Se `npm run db:check` falhar com `ECONNREFUSED`, verifique se o Docker Desktop está com a integração WSL2 ativada (`Settings → Resources → WSL Integration`).
+- Se a porta 5433 estiver ocupada, troque `POSTGRES_PORT` no `.env` e atualize `DATABASE_URL` pra bater com a nova porta.
+- Em máquina com Postgres nativo rodando na 5432, mantenha 5433 pra evitar conflito.
+
 ## Getting Started
 
 First, run the development server:
