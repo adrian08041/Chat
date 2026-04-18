@@ -35,7 +35,8 @@ interface EditMemberSheetProps {
   canDemoteAdmin: boolean;
   isCurrentUser: boolean;
   onClose: () => void;
-  onSave: (updated: TeamMember) => void;
+  // Async — sheet só fecha em resolve. Reject mantém o form aberto com erro.
+  onSave: (updated: TeamMember) => Promise<void>;
 }
 
 export function EditMemberSheet({
@@ -47,14 +48,24 @@ export function EditMemberSheet({
 }: EditMemberSheetProps) {
   const [name, setName] = useState(() => member?.name ?? "");
   const [role, setRole] = useState<UserRole>(() => member?.role ?? "AGENT");
+  const [submitting, setSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const trimmedName = name.trim();
-  const canSubmit = trimmedName.length > 0;
+  const canSubmit = trimmedName.length > 0 && !submitting;
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     if (!member || !canSubmit) return;
-    onSave({ ...member, name: trimmedName, role });
-    onClose();
+    setSaveError(null);
+    setSubmitting(true);
+    try {
+      await onSave({ ...member, name: trimmedName, role });
+      onClose();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Falha ao salvar");
+    } finally {
+      setSubmitting(false);
+    }
   }, [member, trimmedName, role, canSubmit, onSave, onClose]);
 
   const isDemotingLastAdmin =
@@ -64,7 +75,7 @@ export function EditMemberSheet({
     !canDemoteAdmin;
 
   return (
-    <Sheet open={member !== null} onOpenChange={(o) => { if (!o) onClose(); }}>
+    <Sheet open={member !== null} onOpenChange={(o) => { if (!o && !submitting) onClose(); }}>
       <SheetContent
         side="right"
         showCloseButton={false}
@@ -79,7 +90,8 @@ export function EditMemberSheet({
                 </SheetTitle>
                 <button
                   onClick={onClose}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-elevated transition-colors"
+                  disabled={submitting}
+                  className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface-elevated transition-colors disabled:opacity-50"
                   aria-label="Fechar"
                 >
                   <X className="w-4 h-4 text-txt-muted" />
@@ -88,6 +100,15 @@ export function EditMemberSheet({
             </SheetHeader>
 
             <div className="flex-1 flex flex-col gap-5 p-4">
+              {saveError && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger"
+                >
+                  {saveError}
+                </div>
+              )}
+
               <div className="flex items-center gap-3">
                 <AvatarInitials name={member.name} size="lg" />
                 <div className="min-w-0">
@@ -107,7 +128,8 @@ export function EditMemberSheet({
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="h-10 px-3 rounded-lg bg-surface-elevated border border-border-default text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+                  disabled={submitting}
+                  className="h-10 px-3 rounded-lg bg-surface-elevated border border-border-default text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all disabled:opacity-60"
                 />
               </div>
 
@@ -121,7 +143,7 @@ export function EditMemberSheet({
                       member.memberStatus === "ACTIVE" &&
                       option.value !== "ADMIN" &&
                       !canDemoteAdmin;
-                    const disabled = wouldLeaveNoAdmin;
+                    const disabled = wouldLeaveNoAdmin || submitting;
                     return (
                       <button
                         key={option.value}
@@ -165,7 +187,8 @@ export function EditMemberSheet({
             <SheetFooter className="border-t border-border-default pt-4 flex flex-row gap-2">
               <button
                 onClick={onClose}
-                className="flex-1 h-10 rounded-lg border border-border-default text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors"
+                disabled={submitting}
+                className="flex-1 h-10 rounded-lg border border-border-default text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors disabled:opacity-50"
               >
                 Cancelar
               </button>
@@ -174,7 +197,7 @@ export function EditMemberSheet({
                 disabled={!canSubmit || isDemotingLastAdmin}
                 className="flex-1 h-10 rounded-lg bg-primary-600 text-sm font-medium text-txt-on-primary hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Salvar alterações
+                {submitting ? "Salvando..." : "Salvar alterações"}
               </button>
             </SheetFooter>
           </>

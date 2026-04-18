@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSession } from "next-auth/react";
 import { toast } from "sonner";
 import { Plus, Search, MailCheck, Pencil, Trash2 } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
@@ -8,7 +10,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { InviteMemberSheet } from "@/components/settings/invite-member-sheet";
 import { EditMemberSheet } from "@/components/settings/edit-member-sheet";
 import { formatRelativeTime } from "@/lib/format";
-import { CURRENT_USER, MOCK_TEAM_MEMBERS } from "@/lib/mock-data";
+import { apiFetch, ApiClientError } from "@/lib/api-client";
 import type { TeamMember, TeamMemberStatus, UserRole } from "@/types/user";
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -29,6 +31,8 @@ const FILTER_TABS: { key: "all" | UserRole; label: string }[] = [
   { key: "SUPERVISOR", label: "Supervisores" },
   { key: "AGENT", label: "Atendentes" },
 ];
+
+const TEAM_QUERY_KEY = ["team"] as const;
 
 function RoleBadge({ role }: { role: UserRole }) {
   const styles: Record<UserRole, string> = {
@@ -83,6 +87,7 @@ function MemberRow({
       : member.lastActiveAt
         ? formatRelativeTime(member.lastActiveAt)
         : "Nunca acessou";
+  const isPending = member.memberStatus === "PENDING";
 
   return (
     <tr className="border-b border-border-subtle hover:bg-surface-elevated/50 transition-colors">
@@ -111,7 +116,7 @@ function MemberRow({
       </td>
       <td className="py-3 px-4">
         <div className="flex items-center gap-2">
-          {member.memberStatus === "PENDING" && (
+          {isPending && (
             <button
               onClick={() => onResendInvite(member)}
               className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-medium hover:bg-primary-100 transition-colors"
@@ -122,17 +127,25 @@ function MemberRow({
           )}
           <button
             onClick={() => onEdit(member)}
-            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-elevated hover:bg-surface-card border border-border-default transition-colors"
+            disabled={isPending}
+            className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-elevated hover:bg-surface-card border border-border-default transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={`Editar ${member.name}`}
+            title={isPending ? "Aguardando aceite do convite" : undefined}
           >
             <Pencil className="w-4 h-4 text-txt-secondary" />
           </button>
           <button
             onClick={() => onRemove(member)}
-            disabled={isCurrentUser}
+            disabled={isCurrentUser || isPending}
             className="w-8 h-8 flex items-center justify-center rounded-lg bg-danger-light hover:bg-danger-light/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={`Remover ${member.name}`}
-            title={isCurrentUser ? "Você não pode remover a si mesmo" : undefined}
+            title={
+              isCurrentUser
+                ? "Você não pode remover a si mesmo"
+                : isPending
+                  ? "Convite pendente — remoção indisponível"
+                  : undefined
+            }
           >
             <Trash2 className="w-4 h-4 text-danger" />
           </button>
@@ -143,18 +156,62 @@ function MemberRow({
 }
 
 export function TeamSection() {
-  const [members, setMembers] = useState<TeamMember[]>(MOCK_TEAM_MEMBERS);
+  const { data: session } = useSession();
+  const currentUserId = session?.user?.id;
+  const queryClient = useQueryClient();
+
+  const {
+    data: members = [],
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: TEAM_QUERY_KEY,
+    queryFn: () => apiFetch<TeamMember[]>("/api/team"),
+  });
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState<"all" | UserRole>("all");
   const [inviteOpen, setInviteOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<TeamMember | null>(null);
   const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null);
 
+  const invalidate = useCallback(
+    () => queryClient.invalidateQueries({ queryKey: TEAM_QUERY_KEY }),
+    [queryClient],
+  );
+
+  const editMutation = useMutation({
+    mutationFn: (input: { userId: string; name: string; role: UserRole }) =>
+      apiFetch<TeamMember>(`/api/team/${input.userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ name: input.name, role: input.role }),
+      }),
+    onSuccess: (updated) => {
+      toast.success(`${updated.name} atualizado`);
+      invalidate();
+    },
+    // onError omitido — EditMemberSheet trata o erro in-place (M4).
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: (userId: string) =>
+      apiFetch<{ deleted: boolean }>(`/api/team/${userId}`, { method: "DELETE" }),
+    onSuccess: (_, userId) => {
+      const name = members.find((m) => m.id === userId)?.name ?? "Membro";
+      toast.success(`${name} removido da equipe`);
+      invalidate();
+    },
+    onError: (err) => {
+      const msg = err instanceof ApiClientError ? err.message : "Falha ao remover";
+      toast.error(msg);
+    },
+  });
+
   const activeAdminCount = useMemo(
     () =>
       members.filter((m) => m.role === "ADMIN" && m.memberStatus === "ACTIVE")
         .length,
-    [members]
+    [members],
   );
 
   const filteredMembers = useMemo(() => {
@@ -176,23 +233,34 @@ export function TeamSection() {
       active: members.filter((m) => m.memberStatus === "ACTIVE").length,
       pending: members.filter((m) => m.memberStatus === "PENDING").length,
     }),
-    [members]
+    [members],
   );
 
-  const handleInvite = useCallback((member: TeamMember) => {
-    setMembers((prev) => [member, ...prev]);
-    setInviteOpen(false);
-    toast.success(`Convite enviado para ${member.email}`);
-  }, []);
+  const handleInviteSuccess = useCallback(
+    (member: TeamMember) => {
+      toast.success(`Convite enviado para ${member.email}`);
+      setInviteOpen(false);
+      invalidate();
+    },
+    [invalidate],
+  );
 
   const handleEdit = useCallback((member: TeamMember) => {
     setEditTarget(member);
   }, []);
 
-  const handleSaveEdit = useCallback((updated: TeamMember) => {
-    setMembers((prev) => prev.map((m) => (m.id === updated.id ? updated : m)));
-    toast.success(`${updated.name} atualizado`);
-  }, []);
+  const handleSaveEdit = useCallback(
+    async (updated: TeamMember) => {
+      // mutateAsync propaga throw pro sheet — assim ele mantém o form aberto
+      // com erro se a API retornar 409/422/etc.
+      await editMutation.mutateAsync({
+        userId: updated.id,
+        name: updated.name,
+        role: updated.role,
+      });
+    },
+    [editMutation],
+  );
 
   const handleRequestRemove = useCallback((member: TeamMember) => {
     setRemoveTarget(member);
@@ -200,13 +268,13 @@ export function TeamSection() {
 
   const handleConfirmRemove = useCallback(() => {
     if (!removeTarget) return;
-    setMembers((prev) => prev.filter((m) => m.id !== removeTarget.id));
-    toast.success(`${removeTarget.name} removido da equipe`);
+    removeMutation.mutate(removeTarget.id);
     setRemoveTarget(null);
-  }, [removeTarget]);
+  }, [removeTarget, removeMutation]);
 
   const handleResendInvite = useCallback((member: TeamMember) => {
-    toast.success(`Convite reenviado para ${member.email}`);
+    // Resend fica pro passo 15 — por ora, toast informativo.
+    toast.info(`Reenvio ainda não disponível para ${member.email}`);
   }, []);
 
   const removeWouldLeaveNoAdmin =
@@ -220,9 +288,9 @@ export function TeamSection() {
         <div>
           <h2 className="font-headline text-xl font-bold text-txt-primary">Equipe</h2>
           <p className="text-sm text-txt-muted mt-1">
-            {counts.total} {counts.total === 1 ? "membro" : "membros"} · {counts.active} ativo
-            {counts.active === 1 ? "" : "s"}
-            {counts.pending > 0 && ` · ${counts.pending} pendente${counts.pending === 1 ? "" : "s"}`}
+            {isLoading
+              ? "Carregando..."
+              : `${counts.total} ${counts.total === 1 ? "membro" : "membros"} · ${counts.active} ativo${counts.active === 1 ? "" : "s"}${counts.pending > 0 ? ` · ${counts.pending} pendente${counts.pending === 1 ? "" : "s"}` : ""}`}
           </p>
         </div>
         <button
@@ -247,12 +315,12 @@ export function TeamSection() {
           />
         </div>
 
-        <div className="flex gap-2 flex-wrap" role="tablist" aria-label="Filtrar por função">
+        <div className="flex gap-2 flex-wrap" role="group" aria-label="Filtrar por função">
           {FILTER_TABS.map((tab) => (
             <button
               key={tab.key}
-              role="tab"
-              aria-selected={activeFilter === tab.key}
+              type="button"
+              aria-pressed={activeFilter === tab.key}
               onClick={() => setActiveFilter(tab.key)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 activeFilter === tab.key
@@ -271,35 +339,39 @@ export function TeamSection() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-border-default">
-                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">
-                  Membro
-                </th>
-                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">
-                  Função
-                </th>
-                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">
-                  Status
-                </th>
-                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">
-                  Última atividade
-                </th>
-                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">
-                  Ações
-                </th>
+                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">Membro</th>
+                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">Função</th>
+                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">Status</th>
+                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">Última atividade</th>
+                <th className="text-left text-xs font-semibold text-txt-muted uppercase tracking-wider py-3 px-4">Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filteredMembers.map((member) => (
+              {error && (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-sm text-danger">
+                    Erro ao carregar equipe: {error instanceof Error ? error.message : "desconhecido"}
+                  </td>
+                </tr>
+              )}
+              {!error && isLoading && (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-sm text-txt-muted">
+                    Carregando membros...
+                  </td>
+                </tr>
+              )}
+              {!error && !isLoading && filteredMembers.map((member) => (
                 <MemberRow
                   key={member.id}
                   member={member}
-                  isCurrentUser={member.id === CURRENT_USER.id}
+                  isCurrentUser={member.id === currentUserId}
                   onEdit={handleEdit}
                   onRemove={handleRequestRemove}
                   onResendInvite={handleResendInvite}
                 />
               ))}
-              {filteredMembers.length === 0 && (
+              {!error && !isLoading && filteredMembers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-sm text-txt-muted">
                     Nenhum membro encontrado.
@@ -315,14 +387,14 @@ export function TeamSection() {
         open={inviteOpen}
         existingMembers={members}
         onClose={() => setInviteOpen(false)}
-        onInvite={handleInvite}
+        onInvite={handleInviteSuccess}
       />
 
       <EditMemberSheet
         key={editTarget?.id ?? "none"}
         member={editTarget}
         canDemoteAdmin={activeAdminCount > 1}
-        isCurrentUser={editTarget?.id === CURRENT_USER.id}
+        isCurrentUser={editTarget?.id === currentUserId}
         onClose={() => setEditTarget(null)}
         onSave={handleSaveEdit}
       />

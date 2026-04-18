@@ -2,6 +2,7 @@ import type { Session } from "next-auth";
 import type { UserRole } from "@prisma/client";
 import { auth } from "@/auth";
 import { ApiError } from "./api-utils";
+import { prisma } from "./prisma";
 
 export type AuthenticatedSession = Session & {
   user: NonNullable<Session["user"]> & {
@@ -16,6 +17,17 @@ export async function requireAuth(): Promise<AuthenticatedSession> {
   if (!session?.user?.id) {
     throw new ApiError("Não autenticado", 401);
   }
+
+  // JWT tem 30d — um usuário soft-deleted continuaria autenticado até expirar.
+  // Lookup rápido (PK-indexed) invalida a sessão imediatamente. Custo: 1 query/request.
+  const user = await prisma.user.findUnique({
+    where: { id: session.user.id },
+    select: { deletedAt: true },
+  });
+  if (!user || user.deletedAt) {
+    throw new ApiError("Sessão inválida", 401);
+  }
+
   return session as AuthenticatedSession;
 }
 

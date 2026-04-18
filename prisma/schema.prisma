@@ -35,6 +35,59 @@ enum InviteStatus {
   REVOKED
 }
 
+enum InstanceStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+  ERROR
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  AUDIO
+  VIDEO
+  DOCUMENT
+  STICKER
+  LOCATION
+  CONTACT
+  UNKNOWN
+}
+
+enum MessageStatus {
+  SENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ConversationStatus {
+  UNASSIGNED
+  OPEN
+  WAITING_CUSTOMER
+  RESOLVED
+  REOPENED
+}
+
+enum ConversationEventType {
+  OPENED
+  ASSIGNED
+  TRANSFERRED
+  TAGGED
+  UNTAGGED
+  NOTE_ADDED
+  RESOLVED
+  REOPENED
+  MESSAGE_RECEIVED
+  MESSAGE_SENT
+}
+
 // ============================================================================
 // Workspace — tenant raiz. MVP tem 1 workspace; schema já suporta multi.
 // ============================================================================
@@ -47,8 +100,11 @@ model Workspace {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  users   User[]
-  invites Invite[]
+  users         User[]
+  invites       Invite[]
+  instances     Instance[]
+  contacts      Contact[]
+  conversations Conversation[]
 
   @@index([deletedAt])
 }
@@ -71,9 +127,13 @@ model User {
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
-  workspace      Workspace       @relation(fields: [workspaceId], references: [id])
-  sentInvites    Invite[]        @relation("InviteInvitedBy")
-  passwordResets PasswordReset[]
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id])
+  sentInvites           Invite[]            @relation("InviteInvitedBy")
+  passwordResets        PasswordReset[]
+  assignedContacts      Contact[]
+  assignedConversations Conversation[]
+  sentMessages          Message[]           @relation("MessageSentBy")
+  conversationEvents    ConversationEvent[] @relation("ConversationEventActor")
 
   @@index([workspaceId, email])
   @@index([workspaceId, role])
@@ -106,6 +166,43 @@ model Invite {
 }
 
 // ============================================================================
+// Instance — número WhatsApp vinculado a uma instância UazApi.
+// Passo 8 do Backend Plan. `uazapiToken` nunca serializado em response (§10.4).
+// `webhookSecret` protege o path /api/webhooks/uazapi/[secret]. `msgDelayMin/Max`
+// são repassados pra UazApi em /instance/updateDelaySettings (anti-ban).
+// ============================================================================
+
+model Instance {
+  id          String         @id @default(cuid())
+  workspaceId String
+  name        String
+  phone       String?
+  color       String         @default("#075E54")
+  status      InstanceStatus @default(DISCONNECTED)
+
+  // UazApi
+  uazapiSubdomain  String
+  uazapiToken      String  @db.Text
+  uazapiInstanceId String
+  webhookSecret    String  @unique
+  msgDelayMin      Int     @default(2)
+  msgDelayMax      Int     @default(6)
+  proxyUrl         String?
+
+  lastConnectedAt   DateTime?
+  lastHealthCheckAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id])
+  conversations Conversation[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, deletedAt])
+}
+
+// ============================================================================
 // PasswordReset — token de redefinição de senha. Single-use (usedAt marca uso).
 // Passo 6 do Backend Plan. Requests antigos do mesmo user são deletados ao
 // solicitar um novo (1 token ativo por vez).
@@ -122,4 +219,118 @@ model PasswordReset {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+// ============================================================================
+// Contact — lead/cliente do WhatsApp. Unique por (workspaceId, phone).
+// `assignedUserId` = "dono" do lead; separado de Conversation.assignedUserId
+// (que pode variar por atendimento). Phone normalizado sem @suffix.
+// ============================================================================
+
+model Contact {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  phone          String
+  name           String?
+  email          String?
+  avatarUrl      String?
+  assignedUserId String?
+  source         String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace     Workspace      @relation(fields: [workspaceId], references: [id])
+  assignedUser  User?          @relation(fields: [assignedUserId], references: [id])
+  conversations Conversation[]
+
+  @@unique([workspaceId, phone])
+  @@index([workspaceId, name])
+}
+
+// ============================================================================
+// Conversation — atendimento ativo de um contato em uma instância.
+// Passo 10 do Backend Plan. Status é projeção; timeline fica em ConversationEvent (§10.3).
+// Uma conversa "ativa" = NOT RESOLVED. Mensagem nova com conversa RESOLVED
+// reabre via REOPENED event + cria nova Conversation? Escolha atual:
+// reabrir a existente (status → REOPENED) — preserva thread histórica.
+// ============================================================================
+
+model Conversation {
+  id             String             @id @default(cuid())
+  workspaceId    String
+  contactId      String
+  instanceId     String
+  assignedUserId String?
+  status         ConversationStatus @default(UNASSIGNED)
+  lastMessageAt  DateTime?
+  unreadCount    Int                @default(0)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  resolvedAt     DateTime?
+
+  workspace    Workspace           @relation(fields: [workspaceId], references: [id])
+  contact      Contact             @relation(fields: [contactId], references: [id])
+  instance     Instance            @relation(fields: [instanceId], references: [id])
+  assignedUser User?               @relation(fields: [assignedUserId], references: [id])
+  messages     Message[]
+  events       ConversationEvent[]
+
+  @@index([workspaceId, lastMessageAt])
+  @@index([assignedUserId, status])
+  @@index([contactId, instanceId, status])
+}
+
+// ============================================================================
+// Message — unidade atômica do chat. `uazapiMessageId @unique` garante
+// idempotência no webhook (UazApi pode re-entregar). `raw Json?` preserva
+// payload original (Backend Plan §10.2). `uazapiTrackId` amarra outbound
+// SENDING até a confirmação chegar via messages_update.
+// ============================================================================
+
+model Message {
+  id              String           @id @default(cuid())
+  conversationId  String
+  direction       MessageDirection
+  type            MessageType
+  content         String?          @db.Text
+  mediaUrl        String?
+  mediaMimeType   String?
+  mediaFileName   String?
+  status          MessageStatus    @default(SENDING)
+  sentByUserId    String?
+
+  // UazApi
+  uazapiMessageId String? @unique
+  uazapiTrackId   String?
+  senderName      String?
+  replyToId       String?
+
+  raw       Json?
+  createdAt DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sentBy       User?        @relation("MessageSentBy", fields: [sentByUserId], references: [id])
+
+  @@index([conversationId, createdAt])
+  @@index([uazapiTrackId])
+}
+
+// ============================================================================
+// ConversationEvent — timeline append-only (Backend Plan §10.3).
+// Permite reconstruir histórico de atribuição/transferência sem perder dados.
+// `payload` guarda específicos (ex: {fromUserId, toUserId} em TRANSFERRED).
+// ============================================================================
+
+model ConversationEvent {
+  id             String                @id @default(cuid())
+  conversationId String
+  type           ConversationEventType
+  actorId        String?
+  payload        Json?
+  createdAt      DateTime              @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  actor        User?        @relation("ConversationEventActor", fields: [actorId], references: [id])
+
+  @@index([conversationId, createdAt])
 }

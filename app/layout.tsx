@@ -3,6 +3,7 @@ import { Manrope, Inter, Geist } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
+import { QueryProvider } from "@/components/providers/query-provider";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -34,7 +35,9 @@ export default function RootLayout({
       className={cn("h-full", "antialiased", manrope.variable, inter.variable, "font-sans", geist.variable)}
     >
       <body className="min-h-full flex flex-col">
-        <AuthSessionProvider>{children}</AuthSessionProvider>
+        <AuthSessionProvider>
+          <QueryProvider>{children}</QueryProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );
