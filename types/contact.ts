@@ -7,7 +7,7 @@ export interface Contact {
   phone: string;
   email: string | null;
   avatarUrl: string | null;
-  notes: string | null;
+  source: string | null;
   assignedUserId: string | null;
   createdAt: string;
   updatedAt: string;

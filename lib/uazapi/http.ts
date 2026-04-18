@@ -267,8 +267,14 @@ export class HttpUazApiClient implements UazApiClient {
         excludeMessages: params.excludeMessages ?? ["wasSentByApi"],
         addUrlEvents: params.addUrlEvents ?? false,
         addUrlTypesMessages: params.addUrlTypesMessages ?? false,
+        // Default true — sem isso a UazApi salva enabled=false e nunca dispara.
+        enabled: params.enabled ?? true,
       },
     });
+  }
+
+  async getWebhook(creds: UazApiInstanceCredentials): Promise<unknown> {
+    return this.instanceRequest(creds, "/webhook", { method: "GET" });
   }
 
   async updateDelaySettings(

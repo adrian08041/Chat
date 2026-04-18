@@ -86,6 +86,9 @@ export interface SetWebhookParams {
   excludeMessages?: WebhookExcludeFilter[];
   addUrlEvents?: boolean;
   addUrlTypesMessages?: boolean;
+  // UazApi salva `enabled:false` por default — sem isso o webhook é cadastrado
+  // mas nunca dispara. Gotcha descoberto em diagnóstico.
+  enabled?: boolean;
 }
 
 export interface UpdateDelayParams {
@@ -122,6 +125,7 @@ export interface UazApiClient {
     creds: UazApiInstanceCredentials,
     params: SetWebhookParams,
   ): Promise<void>;
+  getWebhook(creds: UazApiInstanceCredentials): Promise<unknown>;
   updateDelaySettings(
     creds: UazApiInstanceCredentials,
     params: UpdateDelayParams,

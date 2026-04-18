@@ -50,6 +50,14 @@ function resolveSubdomain(input: string | undefined): string {
   return chosen;
 }
 
+function buildWebhookUrl(webhookSecret: string): string {
+  const base = (process.env.APP_URL ?? "http://localhost:3000").replace(
+    /\/+$/,
+    "",
+  );
+  return `${base}/api/webhooks/uazapi/${webhookSecret}`;
+}
+
 function requireOwned(instance: Instance | null, workspaceId: string): Instance {
   if (!instance || instance.workspaceId !== workspaceId || instance.deletedAt) {
     throw new ApiError("Instância não encontrada", 404);
@@ -91,9 +99,11 @@ export async function createInstance(
   const client = getUazApiClient();
 
   const created = await client.createInstance({ name: input.name });
+  const webhookSecret = generateWebhookSecret();
 
+  let row: Instance;
   try {
-    const row = await prisma.instance.create({
+    row = await prisma.instance.create({
       data: {
         workspaceId: input.workspaceId,
         name: input.name.trim(),
@@ -101,12 +111,11 @@ export async function createInstance(
         uazapiSubdomain: subdomain,
         uazapiToken: created.token,
         uazapiInstanceId: created.instanceId,
-        webhookSecret: generateWebhookSecret(),
+        webhookSecret,
         msgDelayMin: input.msgDelayMin ?? 2,
         msgDelayMax: input.msgDelayMax ?? 6,
       },
     });
-    return toPublicInstance(row);
   } catch (error) {
     // Rollback best-effort: remove a instância criada no UazApi se a persistência falhou.
     await client
@@ -114,6 +123,26 @@ export async function createInstance(
       .catch(() => undefined);
     throw error;
   }
+
+  // Registra webhook no UazApi. Sem isso o servidor recebe mensagens mas nunca
+  // encaminha pro backend — conversas/mensagens nunca aparecem na UI.
+  // Falha não-fatal: instância fica criada, admin pode re-registrar via update.
+  await client
+    .setWebhook(
+      { subdomain, token: created.token },
+      {
+        url: buildWebhookUrl(webhookSecret),
+        events: ["messages", "messages_update", "connection", "chats"],
+      },
+    )
+    .catch((error) => {
+      console.error(
+        `[instance] setWebhook falhou pra ${row.id} (webhook não registrado):`,
+        error,
+      );
+    });
+
+  return toPublicInstance(row);
 }
 
 export type UpdateInstanceInput = {
@@ -214,11 +243,28 @@ export async function connectInstance(
     workspaceId,
   );
 
-  try {
-    const result = await getUazApiClient().connectInstance({
-      subdomain: existing.uazapiSubdomain,
-      token: existing.uazapiToken,
+  const client = getUazApiClient();
+  const creds = {
+    subdomain: existing.uazapiSubdomain,
+    token: existing.uazapiToken,
+  };
+
+  // Re-registra webhook a cada connect — cobre instances criadas antes do
+  // setWebhook ser parte do fluxo e corrige configs perdidas no UazApi.
+  await client
+    .setWebhook(creds, {
+      url: buildWebhookUrl(existing.webhookSecret),
+      events: ["messages", "messages_update", "connection", "chats"],
+    })
+    .catch((error) => {
+      console.error(
+        `[instance] setWebhook (no connect) falhou pra ${id}:`,
+        error,
+      );
     });
+
+  try {
+    const result = await client.connectInstance(creds);
     const status = mapConnectionStatus(result.status);
     await prisma.instance.update({
       where: { id },

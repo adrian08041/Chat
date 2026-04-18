@@ -201,8 +201,8 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
     );
   }
 
-  const contactName = conversation.contact?.name ?? conversation.contact?.phone ?? "Contato";
-  const contactPhone = conversation.contact?.phone ?? "";
+  const contactName = conversation.contact.name ?? conversation.contact.phone ?? "Contato";
+  const contactPhone = conversation.contact.phone;
   const statusLabel = CONVERSATION_STATUS_LABELS[conversation.status] ?? conversation.status;
 
   // Agrupar mensagens por data para date separators dinâmicos
@@ -238,6 +238,21 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
                 )}
               >
                 {statusLabel}
+              </span>
+              <span
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-body font-medium border"
+                style={{
+                  backgroundColor: `${conversation.instance.color}15`,
+                  color: conversation.instance.color,
+                  borderColor: `${conversation.instance.color}30`,
+                }}
+                title={`Número: ${conversation.instance.name}`}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ backgroundColor: conversation.instance.color }}
+                />
+                {conversation.instance.name}
               </span>
             </div>
             <p className="text-xs text-txt-muted font-body truncate">

@@ -34,7 +34,12 @@ export default function RootLayout({
       lang="pt-BR"
       className={cn("h-full", "antialiased", manrope.variable, inter.variable, "font-sans", geist.variable)}
     >
-      <body className="min-h-full flex flex-col">
+      <body
+        className="min-h-full flex flex-col"
+        // Extensões de browser (ColorZilla etc.) injetam atributos no <body>
+        // antes do React hidratar — suppress silencia o warning.
+        suppressHydrationWarning
+      >
         <AuthSessionProvider>
           <QueryProvider>{children}</QueryProvider>
         </AuthSessionProvider>

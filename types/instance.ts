@@ -1,20 +1,32 @@
-export type InstanceStatus = "CONNECTED" | "DISCONNECTED" | "CONNECTING" | "ERROR";
+// Alinhado ao `InstancePublic` (lib/services/instance.service.ts) —
+// mesmos campos expostos pela API (uazapiToken/webhookSecret ficam no servidor).
+
+export type InstanceStatus =
+  | "CONNECTED"
+  | "DISCONNECTED"
+  | "CONNECTING"
+  | "ERROR";
 
 export interface WhatsAppInstance {
   id: string;
   workspaceId: string;
   name: string;
   phone: string | null;
-  evolutionInstanceName: string;
   color: string;
   status: InstanceStatus;
-  qrCode: string | null;
-  defaultAssignedUserId: string | null;
+  uazapiSubdomain: string;
+  uazapiInstanceId: string;
+  msgDelayMin: number;
+  msgDelayMax: number;
+  proxyUrl: string | null;
+  lastConnectedAt: string | null;
+  lastHealthCheckAt: string | null;
   createdAt: string;
+  updatedAt: string;
 }
 
-export interface NumberCardData {
-  instance: WhatsAppInstance;
-  activeConversations: number;
-  assignedAgents: { id: string; name: string }[];
+export interface ConnectInstanceResult {
+  status: InstanceStatus;
+  qrCode: string | null;
+  pairingCode: string | null;
 }

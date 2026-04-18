@@ -19,9 +19,19 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       throw new ApiError("Body JSON inválido", 400);
     }
 
+    const eventType =
+      typeof body === "object" && body !== null && "EventType" in body
+        ? (body as { EventType: unknown }).EventType
+        : undefined;
+    console.log(
+      `[webhook] recebido secret=${secret.slice(0, 8)}... EventType=${String(eventType)}`,
+    );
+
     const result = await handleWebhookEvent(secret, body);
+    console.log(`[webhook] processado:`, result);
     return ok(result);
   } catch (error) {
+    console.error(`[webhook] erro:`, error);
     return handleRouteError(error);
   }
 }

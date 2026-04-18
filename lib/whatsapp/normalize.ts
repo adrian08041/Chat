@@ -70,7 +70,7 @@ function parseTimestamp(value: unknown): Date {
 
 function extractText(message: unknown): string | null {
   return (
-    pickString(message, "text", "body", "caption") ??
+    pickString(message, "text", "body", "caption", "content") ??
     pickString(path(message, "message"), "conversation", "text") ??
     pickString(
       path(message, "message", "extendedTextMessage"),
@@ -244,7 +244,7 @@ export function normalizeMessage(raw: unknown): NormalizedMessage | null {
 
   const fromMe = pickBoolean(message, "fromMe") ?? false;
   const chatRaw =
-    pickString(message, "chatId", "chat", "remoteJid", "to") ??
+    pickString(message, "chatId", "chatid", "chat", "remoteJid", "to") ??
     pickString(path(message, "key"), "remoteJid");
   const fromRaw = pickString(message, "from", "sender") ?? chatRaw;
   const toRaw = pickString(message, "to", "recipient") ?? chatRaw;
@@ -350,7 +350,9 @@ export function normalizePresenceUpdate(
 }
 
 export function normalizeEvent(raw: unknown): NormalizedEvent {
-  const kind = pickString(raw, "event", "type")?.toLowerCase();
+  // UazApi usa `EventType` (PascalCase). Mantemos `event`/`type` pra compat
+  // com wrappers alternativos e com o shape que usávamos nos testes.
+  const kind = pickString(raw, "EventType", "event", "type")?.toLowerCase();
 
   if (kind === "messages" || kind === "message") {
     const message = normalizeMessage(raw);

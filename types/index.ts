@@ -1,4 +1,11 @@
-export type { Conversation, ConversationStatus } from "./conversation";
+export type {
+  Conversation,
+  ConversationDetail,
+  ConversationStatus,
+  ConversationContactPreview,
+  ConversationInstancePreview,
+  ConversationLastMessage,
+} from "./conversation";
 export type {
   Message,
   MessageDirection,
@@ -6,7 +13,7 @@ export type {
   MessageStatus,
 } from "./message";
 export type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from "./contact";
-export type { WhatsAppInstance, InstanceStatus, NumberCardData } from "./instance";
+export type { WhatsAppInstance, InstanceStatus, ConnectInstanceResult } from "./instance";
 export type { User, UserRole, UserStatus, TeamMember, TeamMemberStatus } from "./user";
 export type { Tag } from "./tag";
 export type { QuickReply, QuickReplyCategory } from "./quick-reply";

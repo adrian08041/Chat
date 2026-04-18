@@ -1,52 +1,73 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { MessageSquare, QrCode, Pencil, UserRound, Plus } from "lucide-react";
-import { AvatarInitials } from "@/components/chat/avatar-initials";
+import { useCallback, useState } from "react";
+import {
+  QrCode,
+  Pencil,
+  Plus,
+  Trash2,
+  Loader2,
+  Phone,
+  AlertTriangle,
+} from "lucide-react";
+import { toast } from "sonner";
 import { EditNumberDrawer } from "@/components/numbers/edit-number-drawer";
 import { QrCodeSheet } from "@/components/numbers/qr-code-sheet";
 import { ConnectNumberSheet } from "@/components/numbers/connect-number-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { MOCK_NUMBERS } from "@/lib/mock-data";
-import type { NumberCardData, InstanceStatus } from "@/types/instance";
+import { ApiClientError } from "@/lib/api-client";
+import {
+  useDeleteInstance,
+  useDisconnectInstance,
+  useInstances,
+} from "@/lib/hooks/use-instances";
+import type { InstanceStatus, WhatsAppInstance } from "@/types/instance";
+
+const STATUS_LABEL: Record<InstanceStatus, string> = {
+  CONNECTED: "Conectado",
+  CONNECTING: "Conectando...",
+  DISCONNECTED: "Desconectado",
+  ERROR: "Erro",
+};
+
+const STATUS_STYLES: Record<InstanceStatus, { pill: string; dot: string }> = {
+  CONNECTED: { pill: "bg-success-light text-success", dot: "bg-success" },
+  CONNECTING: { pill: "bg-warning-light text-warning", dot: "bg-warning animate-pulse" },
+  DISCONNECTED: { pill: "bg-danger-light text-danger", dot: "bg-danger" },
+  ERROR: { pill: "bg-danger-light text-danger", dot: "bg-danger" },
+};
 
 function StatusBadge({ status }: { status: InstanceStatus }) {
-  const isConnected = status === "CONNECTED";
+  const s = STATUS_STYLES[status];
   return (
     <span
-      className={`self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-        isConnected ? "bg-success-light text-success" : "bg-danger-light text-danger"
-      }`}
+      className={`self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${s.pill}`}
     >
-      <span
-        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-          isConnected ? "bg-success" : "bg-danger"
-        }`}
-      />
-      {isConnected ? "Conectado" : "Desconectado"}
+      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${s.dot}`} />
+      {STATUS_LABEL[status]}
     </span>
   );
 }
 
+interface NumberCardProps {
+  instance: WhatsAppInstance;
+  onEdit: (instance: WhatsAppInstance) => void;
+  onQrCode: (instance: WhatsAppInstance) => void;
+  onDisconnect: (instance: WhatsAppInstance) => void;
+  onDelete: (instance: WhatsAppInstance) => void;
+}
+
 function NumberCard({
-  data,
+  instance,
   onEdit,
   onQrCode,
   onDisconnect,
-  onReconnect,
-}: {
-  data: NumberCardData;
-  onEdit: (data: NumberCardData) => void;
-  onQrCode: (data: NumberCardData) => void;
-  onDisconnect: (data: NumberCardData) => void;
-  onReconnect: (data: NumberCardData) => void;
-}) {
-  const { instance, activeConversations, assignedAgents } = data;
+  onDelete,
+}: NumberCardProps) {
   const isConnected = instance.status === "CONNECTED";
 
   return (
     <div className="bg-surface-card rounded-xl border border-border-default p-5 flex flex-col gap-4">
-      {/* Cabeçalho */}
       <div>
         <div className="flex items-center gap-2">
           <span
@@ -54,139 +75,140 @@ function NumberCard({
             style={{ backgroundColor: instance.color }}
           />
           <h2 className="font-headline text-lg font-bold text-txt-primary leading-tight">
-            {instance.phone ?? instance.evolutionInstanceName}
+            {instance.phone ?? instance.name}
           </h2>
         </div>
         <p className="text-sm text-txt-secondary mt-0.5 pl-5">{instance.name}</p>
       </div>
 
-      {/* Badge de status */}
       <StatusBadge status={instance.status} />
 
-      {/* Conversas ativas */}
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-lg bg-success-light flex items-center justify-center flex-shrink-0">
-          <MessageSquare className="w-4 h-4 text-success" />
-        </div>
-        <div>
-          <p className="text-xs text-txt-muted">Conversas ativas</p>
-          <p className="text-lg font-bold text-txt-primary leading-tight">{activeConversations}</p>
-        </div>
+      <div className="flex items-center gap-3 text-xs text-txt-muted">
+        <Phone className="w-3.5 h-3.5 flex-shrink-0" />
+        <span className="truncate">
+          {instance.phone ?? "Aguardando conexão"}
+        </span>
       </div>
 
-      {/* Atendentes atribuídos */}
-      <div>
-        <p className="text-xs text-txt-muted mb-2">Atendentes atribuídos</p>
-        {assignedAgents.length > 0 ? (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {assignedAgents.map((agent) => (
-              <AvatarInitials key={agent.id} name={agent.name} size="sm" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-txt-muted">
-            <UserRound className="w-4 h-4" />
-            <span className="text-xs">Nenhum atendente atribuído</span>
-          </div>
-        )}
-      </div>
-
-      {/* Ações */}
       <div className="flex items-center gap-2 pt-1 border-t border-border-subtle">
         <button
-          onClick={() => onEdit(data)}
+          onClick={() => onEdit(instance)}
           className="flex-1 h-9 rounded-lg border border-border-default bg-surface-card text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors inline-flex items-center justify-center gap-1.5"
         >
           <Pencil className="w-3.5 h-3.5" />
           Editar
         </button>
         <button
-          onClick={() => onQrCode(data)}
+          onClick={() => onQrCode(instance)}
           className="w-9 h-9 rounded-lg border border-border-default bg-surface-card hover:bg-surface-elevated transition-colors flex items-center justify-center flex-shrink-0"
-          aria-label="Ver QR Code"
+          aria-label="Ver QR Code / Reconectar"
+          title="QR Code"
         >
           <QrCode className="w-4 h-4 text-txt-secondary" />
         </button>
         {isConnected ? (
           <button
-            onClick={() => onDisconnect(data)}
+            onClick={() => onDisconnect(instance)}
             className="px-3 h-9 rounded-lg border border-danger bg-surface-card text-sm font-medium text-danger hover:bg-danger-light transition-colors flex-shrink-0"
           >
             Desconectar
           </button>
         ) : (
           <button
-            onClick={() => onReconnect(data)}
+            onClick={() => onQrCode(instance)}
             className="px-3 h-9 rounded-lg border border-primary-600 bg-surface-card text-sm font-medium text-primary-600 hover:bg-primary-50 transition-colors flex-shrink-0"
           >
             Reconectar
           </button>
         )}
+        <button
+          onClick={() => onDelete(instance)}
+          className="w-9 h-9 rounded-lg bg-danger-light hover:bg-danger-light/80 transition-colors flex items-center justify-center flex-shrink-0"
+          aria-label="Remover número"
+          title="Remover"
+        >
+          <Trash2 className="w-4 h-4 text-danger" />
+        </button>
       </div>
     </div>
   );
 }
 
 export function NumbersContent() {
-  const [numbers, setNumbers] = useState(MOCK_NUMBERS);
-  const [editTarget, setEditTarget] = useState<NumberCardData | null>(null);
-  const [qrTarget, setQrTarget] = useState<NumberCardData | null>(null);
-  const [disconnectTarget, setDisconnectTarget] = useState<NumberCardData | null>(null);
+  const { data: instances = [], isLoading, error } = useInstances();
+  const disconnectMutation = useDisconnectInstance();
+  const deleteMutation = useDeleteInstance();
+
+  const [editTarget, setEditTarget] = useState<WhatsAppInstance | null>(null);
+  const [qrTarget, setQrTarget] = useState<WhatsAppInstance | null>(null);
+  const [disconnectTarget, setDisconnectTarget] =
+    useState<WhatsAppInstance | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<WhatsAppInstance | null>(
+    null,
+  );
   const [showConnect, setShowConnect] = useState(false);
 
-  const handleEdit = useCallback((data: NumberCardData) => setEditTarget(data), []);
-  const handleCloseEdit = useCallback(() => setEditTarget(null), []);
-
-  const handleSaveEdit = useCallback((updated: NumberCardData) => {
-    setNumbers((prev) =>
-      prev.map((n) => (n.instance.id === updated.instance.id ? updated : n))
-    );
-  }, []);
-
-  const handleQrCode = useCallback((data: NumberCardData) => setQrTarget(data), []);
-  const handleCloseQr = useCallback(() => setQrTarget(null), []);
-
-  const handleDisconnect = useCallback((data: NumberCardData) => setDisconnectTarget(data), []);
+  const handleEdit = useCallback(
+    (instance: WhatsAppInstance) => setEditTarget(instance),
+    [],
+  );
+  const handleQrCode = useCallback(
+    (instance: WhatsAppInstance) => setQrTarget(instance),
+    [],
+  );
+  const handleDisconnect = useCallback(
+    (instance: WhatsAppInstance) => setDisconnectTarget(instance),
+    [],
+  );
+  const handleDelete = useCallback(
+    (instance: WhatsAppInstance) => setDeleteTarget(instance),
+    [],
+  );
 
   const handleConfirmDisconnect = useCallback(() => {
     if (!disconnectTarget) return;
-    setNumbers((prev) =>
-      prev.map((n) =>
-        n.instance.id === disconnectTarget.instance.id
-          ? { ...n, instance: { ...n.instance, status: "DISCONNECTED" as const }, activeConversations: 0 }
-          : n
-      )
-    );
+    const target = disconnectTarget;
     setDisconnectTarget(null);
-  }, [disconnectTarget]);
+    disconnectMutation.mutate(target.id, {
+      onSuccess: () => toast.success(`${target.name} desconectado`),
+      onError: (err) => {
+        const msg =
+          err instanceof ApiClientError ? err.message : "Falha ao desconectar";
+        toast.error(msg);
+      },
+    });
+  }, [disconnectTarget, disconnectMutation]);
 
-  const handleReconnect = useCallback((data: NumberCardData) => setQrTarget(data), []);
+  const handleConfirmDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    deleteMutation.mutate(target.id, {
+      onSuccess: () => toast.success(`${target.name} removido`),
+      onError: (err) => {
+        const msg =
+          err instanceof ApiClientError ? err.message : "Falha ao remover";
+        toast.error(msg);
+      },
+    });
+  }, [deleteTarget, deleteMutation]);
 
-  const handleSimulateReconnect = useCallback((id: string) => {
-    setNumbers((prev) =>
-      prev.map((n) =>
-        n.instance.id === id
-          ? { ...n, instance: { ...n.instance, status: "CONNECTED" as const } }
-          : n
-      )
-    );
-  }, []);
-
-  const handleCancelDisconnect = useCallback(() => setDisconnectTarget(null), []);
-  const handleCloseConnect = useCallback(() => setShowConnect(false), []);
-
-  const handleConnect = useCallback((newData: NumberCardData) => {
-    setNumbers((prev) => [...prev, newData]);
+  const handleConnected = useCallback(() => {
+    setShowConnect(false);
+    // Revalidação automática via onSuccess dos hooks. Nada a fazer aqui.
   }, []);
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="font-headline text-2xl font-bold text-txt-primary">Números Conectados</h2>
+          <h2 className="font-headline text-2xl font-bold text-txt-primary">
+            Números Conectados
+          </h2>
           <p className="text-sm text-txt-muted mt-1">
-            Gerencie os números de WhatsApp conectados à plataforma
+            {isLoading
+              ? "Carregando..."
+              : `${instances.length} ${instances.length === 1 ? "número" : "números"}`}
           </p>
         </div>
         <button
@@ -198,56 +220,103 @@ export function NumbersContent() {
         </button>
       </div>
 
-      {/* Grid de cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {numbers.map((data) => (
-          <NumberCard
-            key={data.instance.id}
-            data={data}
-            onEdit={handleEdit}
-            onQrCode={handleQrCode}
-            onDisconnect={handleDisconnect}
-            onReconnect={handleReconnect}
-          />
-        ))}
-      </div>
+      {error && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-danger bg-danger-light/40 text-sm text-danger">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium">Erro ao carregar números</p>
+            <p className="text-xs mt-0.5">
+              {error instanceof Error ? error.message : "Erro desconhecido"}
+            </p>
+          </div>
+        </div>
+      )}
 
-      {/* Drawer de edição */}
+      {isLoading && !error && (
+        <div className="flex items-center justify-center py-16 text-txt-muted">
+          <Loader2 className="w-6 h-6 animate-spin" />
+        </div>
+      )}
+
+      {!isLoading && !error && instances.length === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+          <div className="w-12 h-12 rounded-full bg-surface-elevated flex items-center justify-center">
+            <Phone className="w-6 h-6 text-txt-muted" />
+          </div>
+          <div>
+            <p className="text-sm font-medium text-txt-primary">
+              Nenhum número conectado
+            </p>
+            <p className="text-xs text-txt-muted mt-1">
+              Conecte o primeiro número de WhatsApp da sua equipe.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!isLoading && !error && instances.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {instances.map((instance) => (
+            <NumberCard
+              key={instance.id}
+              instance={instance}
+              onEdit={handleEdit}
+              onQrCode={handleQrCode}
+              onDisconnect={handleDisconnect}
+              onDelete={handleDelete}
+            />
+          ))}
+        </div>
+      )}
+
       <EditNumberDrawer
-        key={editTarget?.instance.id ?? "none"}
-        data={editTarget}
-        onClose={handleCloseEdit}
-        onSave={handleSaveEdit}
+        key={editTarget ? `edit-${editTarget.id}` : "edit-none"}
+        instance={editTarget}
+        onClose={() => setEditTarget(null)}
       />
 
-      {/* Sheet de QR Code */}
       <QrCodeSheet
-        data={qrTarget}
-        onClose={handleCloseQr}
-        onReconnect={handleSimulateReconnect}
+        key={qrTarget ? `qr-${qrTarget.id}` : "qr-none"}
+        instance={qrTarget}
+        onClose={() => setQrTarget(null)}
       />
 
-      {/* Sheet de novo número */}
       <ConnectNumberSheet
         open={showConnect}
-        onClose={handleCloseConnect}
-        onConnect={handleConnect}
+        onClose={() => setShowConnect(false)}
+        onConnected={handleConnected}
       />
 
-      {/* Dialog de confirmação de desconexão */}
       <ConfirmDialog
         open={disconnectTarget !== null}
         title="Desconectar número"
         description={
           <>
             Tem certeza que deseja desconectar{" "}
-            <strong>{disconnectTarget?.instance.name}</strong>? As conversas
-            ativas serão pausadas.
+            <strong>{disconnectTarget?.name}</strong>? As conversas ativas
+            serão pausadas.
           </>
         }
         confirmLabel="Desconectar"
+        variant="danger"
         onConfirm={handleConfirmDisconnect}
-        onCancel={handleCancelDisconnect}
+        onCancel={() => setDisconnectTarget(null)}
+      />
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Remover número"
+        description={
+          <>
+            Tem certeza que deseja remover <strong>{deleteTarget?.name}</strong>?
+            O histórico de conversas e mensagens deste número será preservado,
+            mas não será mais possível enviar/receber por ele.
+          </>
+        }
+        confirmLabel="Remover"
+        variant="danger"
+        onConfirm={handleConfirmDelete}
+        onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );

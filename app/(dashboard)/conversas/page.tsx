@@ -1,137 +1,153 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSession } from "next-auth/react";
+import { toast } from "sonner";
 import { ConversationList, ChatArea, ContactPanel } from "@/components/chat";
 import { useConversationStore } from "@/stores/conversation-store";
+import { ApiClientError } from "@/lib/api-client";
 import {
-  MOCK_CONVERSATIONS,
-  MOCK_MESSAGES,
-  MOCK_NOTES,
-  MOCK_AGENTS,
-  CURRENT_USER,
-} from "@/lib/mock-data";
-import type { Conversation } from "@/types/conversation";
-import type { Message } from "@/types/message";
-import type { InternalNote } from "@/types/note";
+  useConversationDetail,
+  useConversationMessages,
+  useConversations,
+  useMarkConversationRead,
+  useSendMessage,
+  type ConversationFilters,
+} from "@/lib/hooks/use-conversations";
+import type { ConversationStatus } from "@/types/conversation";
 
-const PREVIEW_MAX = 60;
+const SEARCH_DEBOUNCE_MS = 300;
 
-function truncatePreview(content: string): string {
-  return content.length > PREVIEW_MAX
-    ? `${content.slice(0, PREVIEW_MAX - 3)}...`
-    : content;
+type StoreFilter = "all" | "mine" | "unassigned" | "resolved";
+
+function mapFilterToQuery(filter: StoreFilter): Partial<ConversationFilters> {
+  switch (filter) {
+    case "mine":
+      return { assignedUserId: "me" };
+    case "unassigned":
+      return { status: "UNASSIGNED" as ConversationStatus };
+    case "resolved":
+      return { status: "RESOLVED" as ConversationStatus };
+    case "all":
+    default:
+      return {};
+  }
 }
 
 export default function ConversationsPage() {
-  const { selectedConversationId } = useConversationStore();
+  const { data: session } = useSession();
+  const { selectedConversationId, activeFilter, searchTerm } =
+    useConversationStore();
 
-  const [conversations, setConversations] = useState<Conversation[]>(MOCK_CONVERSATIONS);
-  const [messages, setMessages] = useState<Message[]>(MOCK_MESSAGES);
-  const [notes, setNotes] = useState<InternalNote[]>(MOCK_NOTES);
+  // Debounce da busca pra não disparar fetch a cada keypress.
+  const [debouncedSearch, setDebouncedSearch] = useState(searchTerm);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchTerm), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchTerm]);
 
-  const selectedConversation = useMemo(
-    () => conversations.find((c) => c.id === selectedConversationId) ?? null,
-    [conversations, selectedConversationId]
+  const filters = useMemo<ConversationFilters>(
+    () => ({
+      ...mapFilterToQuery(activeFilter),
+      ...(debouncedSearch.trim() && { search: debouncedSearch.trim() }),
+    }),
+    [activeFilter, debouncedSearch],
   );
 
-  const selectedMessages = useMemo(
-    () =>
-      selectedConversation
-        ? messages.filter((m) => m.conversationId === selectedConversation.id)
-        : [],
-    [messages, selectedConversation]
+  const {
+    data: listResult,
+    isLoading: listLoading,
+    error: listError,
+  } = useConversations(filters);
+
+  const conversations = useMemo(
+    () => listResult?.items ?? [],
+    [listResult?.items],
   );
 
-  const selectedNotes = useMemo(
-    () =>
-      selectedConversation
-        ? notes.filter((n) => n.conversationId === selectedConversation.id)
-        : [],
-    [notes, selectedConversation]
-  );
+  const { data: detail } = useConversationDetail(selectedConversationId);
+  const { data: messagesResult } = useConversationMessages(selectedConversationId);
+
+  // Backend retorna messages em ordem desc (newest first). UI exibe cronológica.
+  const selectedMessages = useMemo(() => {
+    if (!messagesResult) return [];
+    return [...messagesResult.items].reverse().map((m) => ({
+      id: m.id,
+      conversationId: m.conversationId,
+      contactId: detail?.contactId ?? "",
+      direction: m.direction,
+      type: m.type,
+      content: m.content,
+      mediaUrl: m.mediaUrl,
+      mediaType: m.mediaType,
+      status: m.status,
+      whatsappMessageId: m.whatsappMessageId,
+      sentByUserId: m.sentByUserId,
+      createdAt: m.createdAt,
+    }));
+  }, [messagesResult, detail?.contactId]);
+
+  const selectedConversation = useMemo(() => {
+    if (!selectedConversationId) return null;
+    // Prefere o detail (mais campos); cai pra list item pra evitar flicker antes do detail chegar.
+    if (detail && detail.id === selectedConversationId) return detail;
+    return conversations.find((c) => c.id === selectedConversationId) ?? null;
+  }, [detail, conversations, selectedConversationId]);
+
+  const sendMutation = useSendMessage(selectedConversationId);
+  const markReadMutation = useMarkConversationRead();
+
+  // Marca como lida ao abrir uma conversa com unreadCount > 0.
+  useEffect(() => {
+    if (!selectedConversation || selectedConversation.unreadCount === 0) return;
+    markReadMutation.mutate(selectedConversation.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedConversation?.id, selectedConversation?.unreadCount]);
 
   const assigneeName = useMemo(() => {
     if (!selectedConversation?.assignedUserId) return "Não atribuído";
-    const agent = MOCK_AGENTS.find((a) => a.id === selectedConversation.assignedUserId);
-    return agent?.name ?? "Não atribuído";
-  }, [selectedConversation]);
+    // Passo 13.3 não busca nome de todos os usuários; se for o próprio user mostra "Você".
+    if (selectedConversation.assignedUserId === session?.user?.id) {
+      return session?.user?.name ?? "Você";
+    }
+    return "Atendente";
+  }, [selectedConversation, session]);
 
-  const contact = selectedConversation?.contact ?? null;
+  const contact = detail?.contactFull ?? null;
 
   const handleSendMessage = useCallback(
     (content: string) => {
-      if (!selectedConversation) return;
-      const now = new Date().toISOString();
-      const newMessage: Message = {
-        id: `m-${Date.now()}`,
-        conversationId: selectedConversation.id,
-        contactId: selectedConversation.contactId,
-        direction: "OUTBOUND",
-        type: "TEXT",
-        content,
-        mediaUrl: null,
-        mediaType: null,
-        status: "SENT",
-        whatsappMessageId: null,
-        sentByUserId: CURRENT_USER.id,
-        createdAt: now,
-      };
-      setMessages((prev) => [...prev, newMessage]);
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConversation.id
-            ? { ...c, lastMessageAt: now, lastMessagePreview: truncatePreview(content) }
-            : c
-        )
-      );
+      if (!selectedConversationId) return;
+      sendMutation.mutate(content, {
+        onError: (err) => {
+          const msg =
+            err instanceof ApiClientError ? err.message : "Falha ao enviar";
+          toast.error(msg);
+        },
+      });
     },
-    [selectedConversation]
+    [selectedConversationId, sendMutation],
   );
 
-  const handleAddNote = useCallback(
-    (content: string) => {
-      if (!selectedConversation) return;
-      const now = new Date().toISOString();
-      const newNote: InternalNote = {
-        id: `n-${Date.now()}`,
-        conversationId: selectedConversation.id,
-        userId: CURRENT_USER.id,
-        userName: CURRENT_USER.name,
-        content,
-        createdAt: now,
-      };
-      setNotes((prev) => [newNote, ...prev]);
-    },
-    [selectedConversation]
-  );
+  const handleAddNote = useCallback(() => {
+    toast.info("Notas internas ainda não disponíveis");
+  }, []);
 
   const handleResolveConversation = useCallback(() => {
-    if (!selectedConversation) return;
-    const now = new Date().toISOString();
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversation.id
-          ? { ...c, status: "RESOLVED", resolvedAt: now }
-          : c
-      )
-    );
-  }, [selectedConversation]);
+    toast.info("Resolver conversa ainda não disponível");
+  }, []);
 
-  const handleTransferConversation = useCallback(
-    (agentId: string) => {
-      if (!selectedConversation) return;
-      setConversations((prev) =>
-        prev.map((c) =>
-          c.id === selectedConversation.id ? { ...c, assignedUserId: agentId } : c
-        )
-      );
-    },
-    [selectedConversation]
-  );
+  const handleTransferConversation = useCallback(() => {
+    toast.info("Transferir conversa ainda não disponível");
+  }, []);
 
   return (
     <div className="flex h-full overflow-hidden">
-      <ConversationList conversations={conversations} currentUserId={CURRENT_USER.id} />
+      <ConversationList
+        conversations={conversations}
+        isLoading={listLoading}
+        error={listError instanceof Error ? listError : null}
+      />
       <ChatArea
         conversation={selectedConversation}
         messages={selectedMessages}
@@ -141,7 +157,7 @@ export default function ConversationsPage() {
       {selectedConversation && (
         <ContactPanel
           contact={contact}
-          notes={selectedNotes}
+          notes={[]}
           assigneeName={assigneeName}
           assignedUserId={selectedConversation.assignedUserId}
           isResolved={selectedConversation.status === "RESOLVED"}

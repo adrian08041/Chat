@@ -73,7 +73,7 @@ function NewContactForm({ existingPhones, onClose, onCreate }: NewContactFormPro
       phone: trimmedPhone,
       email: trimmedEmail || null,
       avatarUrl: null,
-      notes: notes.trim() || null,
+      source: notes.trim() || null,
       assignedUserId: agent?.id ?? null,
       createdAt: now,
       updatedAt: now,

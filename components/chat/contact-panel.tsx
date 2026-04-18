@@ -139,7 +139,7 @@ export function ContactPanel({
           Informações do Contato
         </h4>
         <div className="space-y-4">
-          <InfoRow icon={MapPin} label="Origem" value={contact.notes ?? "Desconhecida"} />
+          <InfoRow icon={MapPin} label="Origem" value={contact.source ?? "Desconhecida"} />
           <InfoRow icon={Calendar} label="Primeiro contato" value={formatContactDate(contact.createdAt)} />
           <InfoRow icon={Clock} label="Último contato" value={formatRelativeTime(contact.updatedAt)} />
           <InfoRow icon={UserCircle} label="Atendente responsável" value={assigneeName} />
