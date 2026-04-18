@@ -71,8 +71,9 @@ model User {
   updatedAt    DateTime   @updatedAt
   deletedAt    DateTime?
 
-  workspace   Workspace @relation(fields: [workspaceId], references: [id])
-  sentInvites Invite[]  @relation("InviteInvitedBy")
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id])
+  sentInvites    Invite[]        @relation("InviteInvitedBy")
+  passwordResets PasswordReset[]
 
   @@index([workspaceId, email])
   @@index([workspaceId, role])
@@ -102,4 +103,23 @@ model Invite {
 
   @@index([workspaceId, email])
   @@index([workspaceId, status])
+}
+
+// ============================================================================
+// PasswordReset — token de redefinição de senha. Single-use (usedAt marca uso).
+// Passo 6 do Backend Plan. Requests antigos do mesmo user são deletados ao
+// solicitar um novo (1 token ativo por vez).
+// ============================================================================
+
+model PasswordReset {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

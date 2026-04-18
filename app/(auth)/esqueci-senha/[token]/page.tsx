@@ -11,28 +11,27 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ApiError } from "@/lib/api-utils";
-import { USER_ROLE_LABELS } from "@/lib/constants";
-import { getInviteByToken } from "@/lib/services/invite.service";
-import { AcceptInviteForm } from "./accept-form";
+import { verifyResetToken } from "@/lib/services/password-reset.service";
+import { ResetPasswordForm } from "./reset-form";
 
-export default async function InvitePage({
+export default async function ResetPasswordPage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
 
-  let invite: Awaited<ReturnType<typeof getInviteByToken>> | null = null;
+  let metadata: Awaited<ReturnType<typeof verifyResetToken>> | null = null;
   let errorMessage =
-    "Este link de convite expirou ou não é mais válido. Peça ao administrador da sua empresa para gerar um novo.";
+    "Este link expirou ou não é mais válido. Solicite um novo para continuar.";
 
   try {
-    invite = await getInviteByToken(token);
+    metadata = await verifyResetToken(token);
   } catch (error) {
     if (error instanceof ApiError) {
       errorMessage = error.message;
     } else {
-      console.error("[invite/page] erro inesperado:", error);
+      console.error("[reset/page] erro inesperado:", error);
     }
   }
 
@@ -53,46 +52,45 @@ export default async function InvitePage({
       </div>
 
       <Card className="border-border-default">
-        {!invite ? (
+        {!metadata ? (
           <>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Convite inválido</CardTitle>
+              <CardTitle className="text-base">Link inválido</CardTitle>
               <CardDescription>{errorMessage}</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-2">
               <Button
-                variant="outline"
+                size="lg"
+                className="w-full"
+                render={<Link href="/esqueci-senha" />}
+              >
+                Solicitar novo link
+              </Button>
+              <Button
+                variant="ghost"
                 size="lg"
                 className="w-full"
                 render={<Link href="/login" />}
               >
                 <ArrowLeft className="size-4" />
-                Ir para login
+                Voltar para login
               </Button>
             </CardContent>
           </>
         ) : (
           <>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Aceitar convite</CardTitle>
+              <CardTitle className="text-base">Definir nova senha</CardTitle>
               <CardDescription>
+                Escolha uma nova senha para{" "}
                 <span className="font-medium text-txt-primary">
-                  {invite.inviterName}
-                </span>{" "}
-                convidou você para ingressar em{" "}
-                <span className="font-medium text-txt-primary">
-                  {invite.workspaceName}
-                </span>{" "}
-                como{" "}
-                <span className="font-medium text-txt-primary">
-                  {USER_ROLE_LABELS[invite.role] ?? invite.role}
+                  {metadata.email}
                 </span>
                 .
               </CardDescription>
             </CardHeader>
-
             <CardContent>
-              <AcceptInviteForm token={token} email={invite.email} />
+              <ResetPasswordForm token={token} />
             </CardContent>
           </>
         )}

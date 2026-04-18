@@ -37,14 +37,33 @@ export default function ForgotPasswordPage() {
     defaultValues: { email: "" },
   });
 
-  const onSubmit = async (_data: ForgotForm) => {
-    await new Promise((r) => setTimeout(r, 800));
-    setSent(true);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  const onSubmit = async (data: ForgotForm) => {
+    setSubmitError(null);
+    try {
+      const res = await fetch("/api/auth/forgot", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: data.email }),
+      });
+      if (!res.ok) {
+        const payload = (await res.json().catch(() => null)) as
+          | { success: false; error: string }
+          | null;
+        setSubmitError(payload?.error ?? "Falha ao enviar instruções");
+        return;
+      }
+      setSent(true);
+    } catch {
+      setSubmitError("Falha de rede. Tente novamente.");
+    }
   };
 
   const tryAgain = () => {
     reset();
     setSent(false);
+    setSubmitError(null);
   };
 
   return (
@@ -117,6 +136,15 @@ export default function ForgotPasswordPage() {
                 className="space-y-4"
                 noValidate
               >
+                {submitError && (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger"
+                  >
+                    {submitError}
+                  </div>
+                )}
+
                 <IconField
                   id="email"
                   label="Email"

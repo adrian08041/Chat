@@ -1,3 +1,5 @@
+import type { UserRole } from "@prisma/client";
+
 export const INSTANCE_COLORS = [
   { name: "Esmeralda", value: "#075E54" },
   { name: "Teal", value: "#128C7E" },
@@ -25,7 +27,7 @@ export const CONVERSATION_STATUS_COLORS: Record<string, string> = {
   REOPENED: "bg-secondary-50 text-secondary-600",
 };
 
-export const USER_ROLE_LABELS: Record<string, string> = {
+export const USER_ROLE_LABELS: Record<UserRole, string> = {
   ADMIN: "Administrador",
   SUPERVISOR: "Supervisor",
   AGENT: "Atendente",

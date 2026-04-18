@@ -39,10 +39,19 @@ interface InviteMemberFormProps {
   onInvite: (member: TeamMember) => void;
 }
 
+type InviteApiResponse =
+  | {
+      success: true;
+      data: { id: string; email: string; role: UserRole; expiresAt: string };
+    }
+  | { success: false; error: string };
+
 function InviteMemberForm({ existingEmails, onClose, onInvite }: InviteMemberFormProps) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<UserRole>("AGENT");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const trimmedName = name.trim();
   const trimmedEmail = email.trim().toLowerCase();
@@ -59,25 +68,48 @@ function InviteMemberForm({ existingEmails, onClose, onInvite }: InviteMemberFor
     trimmedName.length > 0 &&
     trimmedEmail.length > 0 &&
     !emailAlreadyExists &&
-    !emailFormatError;
+    !emailFormatError &&
+    !submitting;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!canSubmit) return;
 
-    const now = new Date().toISOString();
-    const member: TeamMember = {
-      id: `u-${Date.now()}`,
-      workspaceId: "w1",
-      name: trimmedName,
-      email: trimmedEmail,
-      role,
-      memberStatus: "PENDING",
-      avatarUrl: null,
-      joinedAt: now,
-      lastActiveAt: null,
-    };
+    setSubmitError(null);
+    setSubmitting(true);
 
-    onInvite(member);
+    try {
+      const res = await fetch("/api/team/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail, role }),
+      });
+      const payload = (await res.json().catch(() => null)) as InviteApiResponse | null;
+
+      if (!res.ok || !payload?.success) {
+        setSubmitError(
+          payload?.success === false
+            ? payload.error
+            : "Falha ao enviar convite",
+        );
+        return;
+      }
+
+      const member: TeamMember = {
+        id: payload.data.id,
+        workspaceId: "",
+        name: trimmedName,
+        email: payload.data.email,
+        role: payload.data.role,
+        memberStatus: "PENDING",
+        avatarUrl: null,
+        joinedAt: new Date().toISOString(),
+        lastActiveAt: null,
+      };
+
+      onInvite(member);
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -101,6 +133,15 @@ function InviteMemberForm({ existingEmails, onClose, onInvite }: InviteMemberFor
       </SheetHeader>
 
       <div className="flex-1 flex flex-col gap-5 p-4">
+        {submitError && (
+          <div
+            role="alert"
+            className="rounded-lg border border-danger/30 bg-danger-light px-3 py-2 text-sm text-danger"
+          >
+            {submitError}
+          </div>
+        )}
+
         <div className="flex flex-col gap-1.5">
           <label htmlFor="invite-name" className="text-xs font-medium text-txt-secondary">
             Nome <span className="text-danger">*</span>
@@ -186,7 +227,7 @@ function InviteMemberForm({ existingEmails, onClose, onInvite }: InviteMemberFor
           disabled={!canSubmit}
           className="flex-1 h-10 rounded-lg bg-primary-600 text-sm font-medium text-txt-on-primary hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Enviar convite
+          {submitting ? "Enviando..." : "Enviar convite"}
         </button>
       </SheetFooter>
     </>
