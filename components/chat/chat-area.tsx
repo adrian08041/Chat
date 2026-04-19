@@ -18,7 +18,7 @@ import { AvatarInitials } from "./avatar-initials";
 import { QuickReplyPopover } from "./quick-reply-popover";
 import { EmojiPickerPopover } from "./emoji-picker-popover";
 import { CONVERSATION_STATUS_LABELS, CONVERSATION_STATUS_COLORS } from "@/lib/constants";
-import { MOCK_QUICK_REPLIES } from "@/lib/mock-data";
+import { useQuickReplies } from "@/lib/hooks/use-quick-replies";
 import type { Conversation } from "@/types/conversation";
 import type { Message } from "@/types/message";
 import type { QuickReply } from "@/types/quick-reply";
@@ -105,11 +105,12 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
   const listboxId = useId();
   const optionIdPrefix = useId();
 
+  const { data: quickReplies = [] } = useQuickReplies();
   const trigger = findQuickReplyTrigger(inputValue);
   const triggerActive = trigger !== null;
   const matches = useMemo(
-    () => (trigger ? filterQuickReplies(trigger.query, MOCK_QUICK_REPLIES) : []),
-    [trigger]
+    () => (trigger ? filterQuickReplies(trigger.query, quickReplies) : []),
+    [trigger, quickReplies]
   );
   const popoverOpen = triggerActive && matches.length > 0 && !dismissed;
   const clampedActiveIndex =

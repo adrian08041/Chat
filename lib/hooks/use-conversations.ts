@@ -13,6 +13,7 @@ import type {
   ConversationStatus,
 } from "@/types/conversation";
 import type { Message } from "@/types/message";
+import type { InternalNote } from "@/types/note";
 
 export const CONVERSATIONS_QUERY_KEY: QueryKey = ["conversations"];
 const LIST_REFETCH_MS = 10_000;
@@ -113,6 +114,119 @@ export function useMarkConversationRead() {
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
+    },
+  });
+}
+
+type PatchConversationBody = {
+  assignedUserId?: string | null;
+  status?: "RESOLVED" | "REOPENED";
+  tagIds?: string[];
+};
+
+function patchConversation(id: string, body: PatchConversationBody) {
+  return apiFetch<ConversationDetail>(`/api/conversations/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function useAssignConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { conversationId: string; assigneeId: string | null }) =>
+      patchConversation(vars.conversationId, { assignedUserId: vars.assigneeId }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useResolveConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      patchConversation(conversationId, { status: "RESOLVED" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useReopenConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      patchConversation(conversationId, { status: "REOPENED" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useSetConversationTags() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { conversationId: string; tagIds: string[] }) =>
+      patchConversation(vars.conversationId, { tagIds: vars.tagIds }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
+    },
+  });
+}
+
+// ============================================================================
+// Notas internas — passo 15.
+// ============================================================================
+
+export function useConversationNotes(conversationId: string | null) {
+  return useQuery({
+    queryKey: [...CONVERSATIONS_QUERY_KEY, conversationId, "notes"],
+    queryFn: () =>
+      apiFetch<InternalNote[]>(`/api/conversations/${conversationId}/notes`),
+    enabled: conversationId !== null,
+  });
+}
+
+export function useAddNote(conversationId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (content: string) => {
+      if (!conversationId) {
+        throw new Error("Conversa não selecionada");
+      }
+      return apiFetch<InternalNote>(
+        `/api/conversations/${conversationId}/notes`,
+        {
+          method: "POST",
+          body: JSON.stringify({ content }),
+        },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [...CONVERSATIONS_QUERY_KEY, conversationId, "notes"],
+      });
+    },
+  });
+}
+
+export function useDeleteNote(conversationId: string | null) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (noteId: string) => {
+      if (!conversationId) {
+        throw new Error("Conversa não selecionada");
+      }
+      return apiFetch<{ deleted: boolean }>(
+        `/api/conversations/${conversationId}/notes/${noteId}`,
+        { method: "DELETE" },
+      );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: [...CONVERSATIONS_QUERY_KEY, conversationId, "notes"],
+      });
     },
   });
 }

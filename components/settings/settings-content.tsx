@@ -11,6 +11,7 @@ import {
   CreditCard,
   Users,
   Shield,
+  Tag,
 } from "lucide-react";
 import { SettingsNav, type SettingsSection } from "@/components/settings/settings-nav";
 import { ProfileSection } from "@/components/settings/profile-section";
@@ -21,6 +22,7 @@ import { MessagingSection } from "@/components/settings/messaging-section";
 import { LanguageSection } from "@/components/settings/language-section";
 import { BillingSection } from "@/components/settings/billing-section";
 import { TeamSection } from "@/components/settings/team-section";
+import { TagsSection } from "@/components/settings/tags-section";
 import { PrivacySection } from "@/components/settings/privacy-section";
 
 const SECTIONS: SettingsSection[] = [
@@ -32,6 +34,7 @@ const SECTIONS: SettingsSection[] = [
   { id: "language", name: "Idioma e Região", icon: Globe, description: "Idioma, fuso horário e formato" },
   { id: "billing", name: "Pagamento", icon: CreditCard, description: "Planos e faturamento" },
   { id: "team", name: "Equipe", icon: Users, description: "Gerenciar membros da equipe" },
+  { id: "tags", name: "Tags", icon: Tag, description: "Rótulos canônicos de conversas e contatos" },
   { id: "privacy", name: "Privacidade", icon: Shield, description: "Controle de dados e privacidade" },
 ];
 
@@ -44,6 +47,7 @@ const SECTION_COMPONENTS: Record<string, React.ComponentType> = {
   language: LanguageSection,
   billing: BillingSection,
   team: TeamSection,
+  tags: TagsSection,
   privacy: PrivacySection,
 };
 

@@ -100,6 +100,94 @@ export async function createInvite(input: CreateInviteInput): Promise<Invite> {
   return invite;
 }
 
+export async function resendInvite(params: {
+  workspaceId: string;
+  inviteId: string;
+}): Promise<Invite> {
+  const token = generateToken();
+  const expiresAt = daysFromNow(INVITE_EXPIRATION_DAYS);
+
+  // Atomic: só avança se status ainda for PENDING/EXPIRED. Fecha corrida
+  // contra um revoke/accept concorrente de outro admin.
+  const updateResult = await prisma.invite.updateMany({
+    where: {
+      id: params.inviteId,
+      workspaceId: params.workspaceId,
+      status: { in: ["PENDING", "EXPIRED"] },
+    },
+    data: { token, expiresAt, status: "PENDING" },
+  });
+
+  if (updateResult.count === 0) {
+    const existing = await prisma.invite.findFirst({
+      where: { id: params.inviteId, workspaceId: params.workspaceId },
+      select: { status: true },
+    });
+    if (!existing) {
+      throw new ApiError("Convite não encontrado", 404);
+    }
+    if (existing.status === "ACCEPTED") {
+      throw new ApiError("Este convite já foi aceito", 409);
+    }
+    throw new ApiError("Este convite foi revogado", 409);
+  }
+
+  const invite = await prisma.invite.findUniqueOrThrow({
+    where: { id: params.inviteId },
+    include: {
+      invitedBy: { select: { name: true } },
+      workspace: { select: { name: true } },
+    },
+  });
+
+  const emailResult = await sendInviteEmail({
+    to: invite.email,
+    inviterName: invite.invitedBy.name,
+    workspaceName: invite.workspace.name,
+    role: invite.role,
+    inviteUrl: buildInviteUrl(token),
+    expiresInDays: INVITE_EXPIRATION_DAYS,
+  });
+
+  if (!emailResult.success) {
+    console.error(
+      `[invite] reenvio falhou para ${invite.email} (invite ${invite.id}): ${emailResult.error}`,
+    );
+  }
+
+  return invite;
+}
+
+export async function revokeInvite(params: {
+  workspaceId: string;
+  inviteId: string;
+}): Promise<void> {
+  // Atomic: só revoga se ainda estiver PENDING ou EXPIRED. Não mexe em
+  // ACCEPTED/REVOKED — idempotente sem corrida.
+  const result = await prisma.invite.updateMany({
+    where: {
+      id: params.inviteId,
+      workspaceId: params.workspaceId,
+      status: { in: ["PENDING", "EXPIRED"] },
+    },
+    data: { status: "REVOKED", revokedAt: new Date() },
+  });
+
+  if (result.count > 0) return;
+
+  const existing = await prisma.invite.findFirst({
+    where: { id: params.inviteId, workspaceId: params.workspaceId },
+    select: { status: true },
+  });
+  if (!existing) {
+    throw new ApiError("Convite não encontrado", 404);
+  }
+  if (existing.status === "ACCEPTED") {
+    throw new ApiError("Este convite já foi aceito", 409);
+  }
+  // Já estava REVOKED — idempotente.
+}
+
 export type InviteMetadata = {
   email: string;
   role: UserRole;

@@ -7,13 +7,21 @@ import { ConversationList, ChatArea, ContactPanel } from "@/components/chat";
 import { useConversationStore } from "@/stores/conversation-store";
 import { ApiClientError } from "@/lib/api-client";
 import {
+  useAddNote,
+  useAssignConversation,
   useConversationDetail,
   useConversationMessages,
+  useConversationNotes,
   useConversations,
+  useDeleteNote,
   useMarkConversationRead,
+  useReopenConversation,
+  useResolveConversation,
   useSendMessage,
+  useSetConversationTags,
   type ConversationFilters,
 } from "@/lib/hooks/use-conversations";
+import { useTags } from "@/lib/hooks/use-tags";
 import type { ConversationStatus } from "@/types/conversation";
 
 const SEARCH_DEBOUNCE_MS = 300;
@@ -96,6 +104,18 @@ export default function ConversationsPage() {
 
   const sendMutation = useSendMessage(selectedConversationId);
   const markReadMutation = useMarkConversationRead();
+  const assignMutation = useAssignConversation();
+  const resolveMutation = useResolveConversation();
+  const reopenMutation = useReopenConversation();
+  const addNoteMutation = useAddNote(selectedConversationId);
+  const deleteNoteMutation = useDeleteNote(selectedConversationId);
+  const setTagsMutation = useSetConversationTags();
+  const {
+    data: notes = [],
+    isLoading: notesLoading,
+    error: notesError,
+  } = useConversationNotes(selectedConversationId);
+  const { data: allTags = [], isLoading: allTagsLoading } = useTags();
 
   // Marca como lida ao abrir uma conversa com unreadCount > 0.
   useEffect(() => {
@@ -104,16 +124,33 @@ export default function ConversationsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedConversation?.id, selectedConversation?.unreadCount]);
 
+  const currentUserId = session?.user?.id;
+  const currentUserRole = session?.user?.role;
+
   const assigneeName = useMemo(() => {
     if (!selectedConversation?.assignedUserId) return "Não atribuído";
-    // Passo 13.3 não busca nome de todos os usuários; se for o próprio user mostra "Você".
-    if (selectedConversation.assignedUserId === session?.user?.id) {
+    if (selectedConversation.assignedUserId === currentUserId) {
       return session?.user?.name ?? "Você";
     }
-    return "Atendente";
-  }, [selectedConversation, session]);
+    return selectedConversation.assignedUser?.name ?? "Atendente";
+  }, [selectedConversation, currentUserId, session]);
 
   const contact = detail?.contactFull ?? null;
+
+  const isManager = currentUserRole === "ADMIN" || currentUserRole === "SUPERVISOR";
+  const isSelfAssigned =
+    !!currentUserId && selectedConversation?.assignedUserId === currentUserId;
+  const canAssumeSelf =
+    !!selectedConversation &&
+    !isSelfAssigned &&
+    selectedConversation.status !== "RESOLVED" &&
+    // AGENT só assume UNASSIGNED; gerentes podem assumir a qualquer momento.
+    (isManager || selectedConversation.assignedUserId === null);
+  const canTransfer = isManager && !!selectedConversation;
+  const isMutating =
+    assignMutation.isPending ||
+    resolveMutation.isPending ||
+    reopenMutation.isPending;
 
   const handleSendMessage = useCallback(
     (content: string) => {
@@ -129,17 +166,102 @@ export default function ConversationsPage() {
     [selectedConversationId, sendMutation],
   );
 
-  const handleAddNote = useCallback(() => {
-    toast.info("Notas internas ainda não disponíveis");
-  }, []);
+  const handleAddNote = useCallback(
+    (content: string) => {
+      if (!selectedConversationId) return;
+      addNoteMutation.mutate(content, {
+        onSuccess: () => toast.success("Nota adicionada"),
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiClientError ? err.message : "Falha ao adicionar nota",
+          ),
+      });
+    },
+    [selectedConversationId, addNoteMutation],
+  );
+
+  const handleDeleteNote = useCallback(
+    (noteId: string) => {
+      if (!selectedConversationId) return;
+      deleteNoteMutation.mutate(noteId, {
+        onSuccess: () => toast.success("Nota excluída"),
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiClientError ? err.message : "Falha ao excluir nota",
+          ),
+      });
+    },
+    [selectedConversationId, deleteNoteMutation],
+  );
+
+  const handleSetTags = useCallback(
+    (tagIds: string[]) => {
+      if (!selectedConversationId) return;
+      setTagsMutation.mutate(
+        { conversationId: selectedConversationId, tagIds },
+        {
+          onError: (err) =>
+            toast.error(
+              err instanceof ApiClientError ? err.message : "Falha ao atualizar tags",
+            ),
+        },
+      );
+    },
+    [selectedConversationId, setTagsMutation],
+  );
+
+  const handleAssumeConversation = useCallback(() => {
+    if (!selectedConversationId || !currentUserId) return;
+    assignMutation.mutate(
+      { conversationId: selectedConversationId, assigneeId: currentUserId },
+      {
+        onSuccess: () => toast.success("Você assumiu a conversa"),
+        onError: (err) =>
+          toast.error(
+            err instanceof ApiClientError ? err.message : "Falha ao atribuir",
+          ),
+      },
+    );
+  }, [selectedConversationId, currentUserId, assignMutation]);
 
   const handleResolveConversation = useCallback(() => {
-    toast.info("Resolver conversa ainda não disponível");
-  }, []);
+    if (!selectedConversationId) return;
+    resolveMutation.mutate(selectedConversationId, {
+      onSuccess: () => toast.success("Conversa resolvida"),
+      onError: (err) =>
+        toast.error(
+          err instanceof ApiClientError ? err.message : "Falha ao resolver",
+        ),
+    });
+  }, [selectedConversationId, resolveMutation]);
 
-  const handleTransferConversation = useCallback(() => {
-    toast.info("Transferir conversa ainda não disponível");
-  }, []);
+  const handleReopenConversation = useCallback(() => {
+    if (!selectedConversationId) return;
+    reopenMutation.mutate(selectedConversationId, {
+      onSuccess: () => toast.success("Conversa reaberta"),
+      onError: (err) =>
+        toast.error(
+          err instanceof ApiClientError ? err.message : "Falha ao reabrir",
+        ),
+    });
+  }, [selectedConversationId, reopenMutation]);
+
+  const handleTransferConversation = useCallback(
+    (agentId: string) => {
+      if (!selectedConversationId) return;
+      assignMutation.mutate(
+        { conversationId: selectedConversationId, assigneeId: agentId },
+        {
+          onSuccess: () => toast.success("Conversa transferida"),
+          onError: (err) =>
+            toast.error(
+              err instanceof ApiClientError ? err.message : "Falha ao transferir",
+            ),
+        },
+      );
+    },
+    [selectedConversationId, assignMutation],
+  );
 
   return (
     <div className="flex h-full overflow-hidden">
@@ -157,12 +279,28 @@ export default function ConversationsPage() {
       {selectedConversation && (
         <ContactPanel
           contact={contact}
-          notes={[]}
+          notes={notes}
+          notesLoading={notesLoading}
+          notesError={notesError instanceof Error ? notesError.message : null}
+          isAddingNote={addNoteMutation.isPending}
+          currentUserId={currentUserId ?? null}
+          isManager={isManager}
+          conversationTags={detail?.tags ?? []}
+          allTags={allTags}
+          allTagsLoading={allTagsLoading}
+          canEditTags={isManager || isSelfAssigned}
+          onSetTags={handleSetTags}
           assigneeName={assigneeName}
           assignedUserId={selectedConversation.assignedUserId}
           isResolved={selectedConversation.status === "RESOLVED"}
+          canTransfer={canTransfer}
+          canAssumeSelf={canAssumeSelf}
+          isMutating={isMutating}
           onAddNote={handleAddNote}
+          onDeleteNote={handleDeleteNote}
+          onAssumeConversation={handleAssumeConversation}
           onResolveConversation={handleResolveConversation}
+          onReopenConversation={handleReopenConversation}
           onTransferConversation={handleTransferConversation}
         />
       )}

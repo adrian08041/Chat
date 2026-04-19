@@ -1,6 +1,7 @@
 import type { Contact } from "./contact";
 import type { WhatsAppInstance } from "./instance";
 import type { MessageDirection } from "./message";
+import type { Tag } from "./tag";
 
 export type ConversationStatus =
   | "UNASSIGNED"
@@ -31,6 +32,12 @@ export interface ConversationInstancePreview {
   color: string;
 }
 
+// Resumo do atendente atribuído — vem junto da listagem pra mostrar nome sem N+1.
+export interface ConversationAssigneePreview {
+  id: string;
+  name: string;
+}
+
 // Shape retornado por GET /api/conversations.
 export interface Conversation {
   id: string;
@@ -38,6 +45,7 @@ export interface Conversation {
   contactId: string;
   instanceId: string;
   assignedUserId: string | null;
+  assignedUser: ConversationAssigneePreview | null;
   status: ConversationStatus;
   unreadCount: number;
   lastMessageAt: string | null;
@@ -53,4 +61,5 @@ export interface Conversation {
 export interface ConversationDetail extends Conversation {
   contactFull: Contact;
   instanceFull: WhatsAppInstance;
+  tags: Tag[];
 }

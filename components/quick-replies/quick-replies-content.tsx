@@ -2,11 +2,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Search, Plus } from "lucide-react";
+import { toast } from "sonner";
 import { QuickReplyCard } from "@/components/quick-replies/quick-reply-card";
 import { QuickReplySheet } from "@/components/quick-replies/quick-reply-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { MOCK_QUICK_REPLIES } from "@/lib/mock-data";
 import { QUICK_REPLY_CATEGORIES } from "@/lib/constants";
+import { ApiClientError } from "@/lib/api-client";
+import {
+  useCreateQuickReply,
+  useDeleteQuickReply,
+  useQuickReplies,
+  useUpdateQuickReply,
+} from "@/lib/hooks/use-quick-replies";
 import type { QuickReply, QuickReplyCategory } from "@/types/quick-reply";
 
 type FilterKey = "todos" | QuickReplyCategory;
@@ -22,7 +29,11 @@ type SheetState =
   | { mode: "edit"; target: QuickReply };
 
 export function QuickRepliesContent() {
-  const [replies, setReplies] = useState<QuickReply[]>(MOCK_QUICK_REPLIES);
+  const { data: replies = [], isLoading, error } = useQuickReplies();
+  const createMutation = useCreateQuickReply();
+  const updateMutation = useUpdateQuickReply();
+  const deleteMutation = useDeleteQuickReply();
+
   const [searchTerm, setSearchTerm] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterKey>("todos");
   const [sheetState, setSheetState] = useState<SheetState>({ mode: "closed" });
@@ -58,47 +69,49 @@ export function QuickRepliesContent() {
   const handleCloseSheet = useCallback(() => setSheetState({ mode: "closed" }), []);
 
   const handleSubmit = useCallback(
-    (data: {
+    async (data: {
       shortcut: string;
       title: string;
       content: string;
       category: QuickReplyCategory;
       hasMedia: boolean;
     }) => {
-      if (sheetState.mode === "create") {
-        const now = new Date().toISOString();
-        const newReply: QuickReply = {
-          id: `qr-${Date.now()}`,
-          workspaceId: "w1",
-          shortcut: data.shortcut,
-          title: data.title,
-          content: data.content,
-          category: data.category,
-          mediaUrl: data.hasMedia ? "/placeholder-media.png" : null,
-          mediaType: data.hasMedia ? "image/png" : null,
-          createdAt: now,
-        };
-        setReplies((prev) => [newReply, ...prev]);
-      } else if (sheetState.mode === "edit") {
-        setReplies((prev) =>
-          prev.map((r) =>
-            r.id === sheetState.target.id
-              ? {
-                  ...r,
-                  shortcut: data.shortcut,
-                  title: data.title,
-                  content: data.content,
-                  category: data.category,
-                  mediaUrl: data.hasMedia ? r.mediaUrl ?? "/placeholder-media.png" : null,
-                  mediaType: data.hasMedia ? r.mediaType ?? "image/png" : null,
-                }
-              : r
-          )
-        );
+      try {
+        if (sheetState.mode === "create") {
+          await createMutation.mutateAsync({
+            shortcut: data.shortcut,
+            title: data.title,
+            content: data.content,
+            category: data.category,
+            // MVP: placeholder quando hasMedia; upload real fica pro passo 14.
+            mediaUrl: data.hasMedia ? "/placeholder-media.png" : null,
+            mediaType: data.hasMedia ? "image/png" : null,
+          });
+          toast.success("Resposta criada");
+        } else if (sheetState.mode === "edit") {
+          await updateMutation.mutateAsync({
+            id: sheetState.target.id,
+            shortcut: data.shortcut,
+            title: data.title,
+            content: data.content,
+            category: data.category,
+            mediaUrl: data.hasMedia
+              ? sheetState.target.mediaUrl ?? "/placeholder-media.png"
+              : null,
+            mediaType: data.hasMedia
+              ? sheetState.target.mediaType ?? "image/png"
+              : null,
+          });
+          toast.success("Resposta atualizada");
+        }
+        setSheetState({ mode: "closed" });
+      } catch (err) {
+        const msg =
+          err instanceof ApiClientError ? err.message : "Falha ao salvar resposta";
+        toast.error(msg);
       }
-      setSheetState({ mode: "closed" });
     },
-    [sheetState]
+    [sheetState, createMutation, updateMutation]
   );
 
   const handleRequestDelete = useCallback((reply: QuickReply) => {
@@ -107,9 +120,18 @@ export function QuickRepliesContent() {
 
   const handleConfirmDelete = useCallback(() => {
     if (!deleteTarget) return;
-    setReplies((prev) => prev.filter((r) => r.id !== deleteTarget.id));
-    setDeleteTarget(null);
-  }, [deleteTarget]);
+    deleteMutation.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success(`Resposta /${deleteTarget.shortcut} excluída`);
+        setDeleteTarget(null);
+      },
+      onError: (err) => {
+        const msg =
+          err instanceof ApiClientError ? err.message : "Falha ao excluir";
+        toast.error(msg);
+      },
+    });
+  }, [deleteTarget, deleteMutation]);
 
   const handleCancelDelete = useCallback(() => setDeleteTarget(null), []);
 
@@ -172,7 +194,20 @@ export function QuickRepliesContent() {
 
       {/* Lista de cards */}
       <div className="flex flex-col gap-3">
-        {filteredReplies.map((reply) => (
+        {error && (
+          <div className="bg-surface-card rounded-xl border border-border-default py-6 text-center">
+            <p className="text-sm text-danger">
+              Erro ao carregar respostas:{" "}
+              {error instanceof Error ? error.message : "desconhecido"}
+            </p>
+          </div>
+        )}
+        {!error && isLoading && (
+          <div className="bg-surface-card rounded-xl border border-border-default py-12 text-center">
+            <p className="text-sm text-txt-muted">Carregando respostas...</p>
+          </div>
+        )}
+        {!error && !isLoading && filteredReplies.map((reply) => (
           <QuickReplyCard
             key={reply.id}
             reply={reply}
@@ -180,7 +215,7 @@ export function QuickRepliesContent() {
             onDelete={handleRequestDelete}
           />
         ))}
-        {filteredReplies.length === 0 && (
+        {!error && !isLoading && filteredReplies.length === 0 && (
           <div className="bg-surface-card rounded-xl border border-border-default py-12 text-center">
             <p className="text-sm text-txt-muted">Nenhuma resposta encontrada.</p>
           </div>

@@ -14,11 +14,14 @@ import type {
   ConversationStatus,
   Instance,
   Message,
+  Tag,
+  User,
 } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { toPublicInstance, type InstancePublic } from "./instance.service";
+import type { TagDTO } from "./tag.service";
 
 type PrismaClientOrTx = Prisma.TransactionClient | typeof prisma;
 
@@ -144,6 +147,7 @@ export type ConversationListItemDTO = {
   contactId: string;
   instanceId: string;
   assignedUserId: string | null;
+  assignedUser: { id: string; name: string } | null;
   status: ConversationStatus;
   unreadCount: number;
   lastMessageAt: string | null;
@@ -172,6 +176,7 @@ function toConversationListItem(
   row: Conversation & {
     contact: Pick<Contact, "id" | "name" | "phone" | "avatarUrl">;
     instance: Pick<Instance, "id" | "name" | "color">;
+    assignedUser: Pick<User, "id" | "name"> | null;
     messages: Pick<Message, "content" | "direction" | "createdAt">[];
   },
 ): ConversationListItemDTO {
@@ -182,6 +187,9 @@ function toConversationListItem(
     contactId: row.contactId,
     instanceId: row.instanceId,
     assignedUserId: row.assignedUserId,
+    assignedUser: row.assignedUser
+      ? { id: row.assignedUser.id, name: row.assignedUser.name }
+      : null,
     status: row.status,
     unreadCount: row.unreadCount,
     lastMessageAt: row.lastMessageAt?.toISOString() ?? null,
@@ -256,6 +264,7 @@ export async function listConversations(
         select: { id: true, name: true, phone: true, avatarUrl: true },
       },
       instance: { select: { id: true, name: true, color: true } },
+      assignedUser: { select: { id: true, name: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
@@ -294,7 +303,19 @@ export type ConversationDetailDTO = ConversationListItemDTO & {
     updatedAt: string;
   };
   instanceFull: InstancePublic;
+  tags: TagDTO[];
 };
+
+function tagRowToDTO(tag: Tag): TagDTO {
+  return {
+    id: tag.id,
+    workspaceId: tag.workspaceId,
+    name: tag.name,
+    color: tag.color,
+    createdAt: tag.createdAt.toISOString(),
+    updatedAt: tag.updatedAt.toISOString(),
+  };
+}
 
 export async function getConversationById(params: {
   workspaceId: string;
@@ -308,10 +329,15 @@ export async function getConversationById(params: {
     include: {
       contact: true,
       instance: true,
+      assignedUser: { select: { id: true, name: true } },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 1,
         select: { content: true, direction: true, createdAt: true },
+      },
+      tags: {
+        include: { tag: true },
+        orderBy: { tag: { name: "asc" } },
       },
     },
   });
@@ -336,6 +362,7 @@ export async function getConversationById(params: {
       updatedAt: row.contact.updatedAt.toISOString(),
     },
     instanceFull: toPublicInstance(row.instance),
+    tags: row.tags.map((r) => tagRowToDTO(r.tag)),
   };
 }
 
@@ -364,4 +391,191 @@ export async function markConversationRead(params: {
     data: { unreadCount: 0 },
   });
   return { unreadCount: 0 };
+}
+
+// ============================================================================
+// Assign / transfer / resolve / reopen — passo 16 do Backend Plan.
+// ============================================================================
+
+async function loadConversationForMutation(
+  tx: PrismaClientOrTx,
+  params: { workspaceId: string; conversationId: string },
+): Promise<Conversation> {
+  const existing = await tx.conversation.findFirst({
+    where: {
+      id: params.conversationId,
+      workspaceId: params.workspaceId,
+    },
+  });
+  if (!existing) {
+    throw new ApiError("Conversa não encontrada", 404);
+  }
+  return existing;
+}
+
+async function assertAssigneeBelongsToWorkspace(
+  tx: PrismaClientOrTx,
+  params: { workspaceId: string; userId: string },
+): Promise<void> {
+  const user = await tx.user.findFirst({
+    where: {
+      id: params.userId,
+      workspaceId: params.workspaceId,
+      deletedAt: null,
+    },
+    select: { id: true },
+  });
+  if (!user) {
+    throw new ApiError("Atendente inválido", 409);
+  }
+}
+
+export type AssignConversationInput = {
+  workspaceId: string;
+  conversationId: string;
+  actorId: string;
+  newAssigneeId: string | null;
+};
+
+export async function assignConversation(
+  input: AssignConversationInput,
+): Promise<ConversationDetailDTO> {
+  await prisma.$transaction(async (tx) => {
+    const current = await loadConversationForMutation(tx, input);
+
+    if (current.assignedUserId === input.newAssigneeId) {
+      return;
+    }
+
+    if (input.newAssigneeId) {
+      await assertAssigneeBelongsToWorkspace(tx, {
+        workspaceId: input.workspaceId,
+        userId: input.newAssigneeId,
+      });
+    }
+
+    // Status rule: UNASSIGNED quando sem assignee; OPEN quando passa a ter
+    // (exceto se já está RESOLVED — nesse caso mantém RESOLVED pra não ressuscitar
+    // sem passar por reopen explícito).
+    let nextStatus: ConversationStatus = current.status;
+    if (input.newAssigneeId === null) {
+      nextStatus = "UNASSIGNED";
+    } else if (current.status === "UNASSIGNED") {
+      nextStatus = "OPEN";
+    }
+
+    await tx.conversation.update({
+      where: { id: current.id },
+      data: {
+        assignedUserId: input.newAssigneeId,
+        status: nextStatus,
+      },
+    });
+
+    const eventType: ConversationEventType =
+      current.assignedUserId && input.newAssigneeId
+        ? "TRANSFERRED"
+        : "ASSIGNED";
+    await appendEvent(tx, {
+      conversationId: current.id,
+      type: eventType,
+      actorId: input.actorId,
+      payload: {
+        fromUserId: current.assignedUserId,
+        toUserId: input.newAssigneeId,
+      },
+    });
+  });
+
+  return getConversationById({
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+  });
+}
+
+// Idempotente — se a conversa já tem assignee, não faz nada.
+// Usado no outbound: AGENT (ou qualquer role) que envia em UNASSIGNED vira assignee.
+export async function autoAssignIfUnassigned(
+  tx: PrismaClientOrTx,
+  params: { conversationId: string; userId: string },
+): Promise<void> {
+  const current = await tx.conversation.findUnique({
+    where: { id: params.conversationId },
+    select: { assignedUserId: true, status: true },
+  });
+  if (!current || current.assignedUserId) return;
+
+  await tx.conversation.update({
+    where: { id: params.conversationId },
+    data: {
+      assignedUserId: params.userId,
+      // Se estava UNASSIGNED, promove pra OPEN. Outros status (RESOLVED/REOPENED)
+      // já são tratados antes via getActiveConversationForOutbound.
+      ...(current.status === "UNASSIGNED" && { status: "OPEN" }),
+    },
+  });
+  await appendEvent(tx, {
+    conversationId: params.conversationId,
+    type: "ASSIGNED",
+    actorId: params.userId,
+    payload: { fromUserId: null, toUserId: params.userId, auto: true },
+  });
+}
+
+export type ResolveConversationInput = {
+  workspaceId: string;
+  conversationId: string;
+  actorId: string;
+};
+
+export async function resolveConversation(
+  input: ResolveConversationInput,
+): Promise<ConversationDetailDTO> {
+  await prisma.$transaction(async (tx) => {
+    const current = await loadConversationForMutation(tx, input);
+    if (current.status === "RESOLVED") {
+      throw new ApiError("Conversa já está resolvida", 409);
+    }
+    await tx.conversation.update({
+      where: { id: current.id },
+      data: { status: "RESOLVED", resolvedAt: new Date() },
+    });
+    await appendEvent(tx, {
+      conversationId: current.id,
+      type: "RESOLVED",
+      actorId: input.actorId,
+    });
+  });
+
+  return getConversationById({
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+  });
+}
+
+export type ReopenConversationInput = ResolveConversationInput;
+
+export async function reopenConversation(
+  input: ReopenConversationInput,
+): Promise<ConversationDetailDTO> {
+  await prisma.$transaction(async (tx) => {
+    const current = await loadConversationForMutation(tx, input);
+    if (current.status !== "RESOLVED") {
+      throw new ApiError("Apenas conversas resolvidas podem ser reabertas", 409);
+    }
+    await tx.conversation.update({
+      where: { id: current.id },
+      data: { status: "REOPENED", resolvedAt: null },
+    });
+    await appendEvent(tx, {
+      conversationId: current.id,
+      type: "REOPENED",
+      actorId: input.actorId,
+    });
+  });
+
+  return getConversationById({
+    workspaceId: input.workspaceId,
+    conversationId: input.conversationId,
+  });
 }

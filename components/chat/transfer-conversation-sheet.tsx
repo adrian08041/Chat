@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { X, Search } from "lucide-react";
 import {
   Sheet,
@@ -9,7 +10,8 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { AvatarInitials } from "./avatar-initials";
-import { MOCK_AGENTS } from "@/lib/mock-data";
+import { apiFetch } from "@/lib/api-client";
+import type { TeamMember } from "@/types/user";
 
 interface TransferConversationSheetProps {
   open: boolean;
@@ -27,9 +29,17 @@ interface TransferListProps {
 function TransferList({ currentAssignedUserId, onClose, onTransfer }: TransferListProps) {
   const [query, setQuery] = useState("");
 
+  const { data: members = [], isLoading, error } = useQuery({
+    queryKey: ["team"],
+    queryFn: () => apiFetch<TeamMember[]>("/api/team"),
+  });
+
   const availableAgents = useMemo(
-    () => MOCK_AGENTS.filter((a) => a.id !== currentAssignedUserId),
-    [currentAssignedUserId]
+    () =>
+      members.filter(
+        (m) => m.memberStatus === "ACTIVE" && m.id !== currentAssignedUserId,
+      ),
+    [members, currentAssignedUserId],
   );
 
   const filtered = useMemo(() => {
@@ -78,7 +88,15 @@ function TransferList({ currentAssignedUserId, onClose, onTransfer }: TransferLi
       </div>
 
       <div className="flex-1 overflow-y-auto px-2 py-3">
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <p className="text-sm text-txt-muted text-center py-8 font-body">
+            Carregando atendentes…
+          </p>
+        ) : error ? (
+          <p className="text-sm text-danger-600 text-center py-8 font-body">
+            Falha ao carregar atendentes
+          </p>
+        ) : filtered.length === 0 ? (
           <p className="text-sm text-txt-muted text-center py-8 font-body">
             Nenhum atendente encontrado
           </p>

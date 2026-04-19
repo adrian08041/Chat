@@ -1,21 +1,39 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Phone, Video, MapPin, Calendar, Clock, UserCircle, ArrowRightLeft, CheckCircle2 } from "lucide-react";
+import { Phone, Video, MapPin, Calendar, Clock, UserCircle, ArrowRightLeft, CheckCircle2, UserPlus, RotateCcw, Trash2 } from "lucide-react";
 import { AvatarInitials } from "./avatar-initials";
 import { TransferConversationSheet } from "./transfer-conversation-sheet";
+import { ConversationTags } from "./conversation-tags";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { Contact } from "@/types/contact";
 import type { InternalNote } from "@/types/note";
+import type { Tag } from "@/types/tag";
 
 interface ContactPanelProps {
   contact: Contact | null;
   notes: InternalNote[];
+  notesLoading?: boolean;
+  notesError?: string | null;
+  isAddingNote?: boolean;
+  currentUserId?: string | null;
+  isManager?: boolean;
+  conversationTags?: Tag[];
+  allTags?: Tag[];
+  allTagsLoading?: boolean;
+  canEditTags?: boolean;
+  onSetTags?: (tagIds: string[]) => void;
   assigneeName: string;
   assignedUserId: string | null;
   isResolved: boolean;
+  canTransfer: boolean;
+  canAssumeSelf: boolean;
+  isMutating?: boolean;
   onAddNote: (content: string) => void;
+  onDeleteNote?: (noteId: string) => void;
+  onAssumeConversation: () => void;
   onResolveConversation: () => void;
+  onReopenConversation: () => void;
   onTransferConversation: (agentId: string) => void;
 }
 
@@ -64,16 +82,33 @@ function InfoRow({
 export function ContactPanel({
   contact,
   notes,
+  notesLoading = false,
+  notesError = null,
+  isAddingNote = false,
+  currentUserId = null,
+  isManager = false,
+  conversationTags = [],
+  allTags = [],
+  allTagsLoading = false,
+  canEditTags = false,
+  onSetTags,
   assigneeName,
   assignedUserId,
   isResolved,
+  canTransfer,
+  canAssumeSelf,
+  isMutating = false,
   onAddNote,
+  onDeleteNote,
+  onAssumeConversation,
   onResolveConversation,
+  onReopenConversation,
   onTransferConversation,
 }: ContactPanelProps) {
   const [noteDraft, setNoteDraft] = useState("");
   const [transferOpen, setTransferOpen] = useState(false);
   const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<InternalNote | null>(null);
 
   const trimmedNote = noteDraft.trim();
 
@@ -82,6 +117,12 @@ export function ContactPanel({
     onAddNote(trimmedNote);
     setNoteDraft("");
   }, [trimmedNote, onAddNote]);
+
+  const handleConfirmDeleteNote = useCallback(() => {
+    if (!noteToDelete || !onDeleteNote) return;
+    onDeleteNote(noteToDelete.id);
+    setNoteToDelete(null);
+  }, [noteToDelete, onDeleteNote]);
 
   const handleConfirmResolve = useCallback(() => {
     setConfirmResolveOpen(false);
@@ -93,8 +134,6 @@ export function ContactPanel({
 
   if (!contact) return null;
 
-  const tags = contact.tags ?? [];
-
   return (
     <div className="hidden lg:flex w-[320px] flex-shrink-0 border-l border-border-default bg-surface-card flex-col h-full overflow-y-auto">
       <div className="flex flex-col items-center pt-8 pb-5 px-5 border-b border-border-subtle">
@@ -103,24 +142,6 @@ export function ContactPanel({
           {contact.name ?? "Sem nome"}
         </h3>
         <p className="text-sm text-txt-muted font-body">{contact.phone}</p>
-
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-3 justify-center">
-            {tags.map((tag) => (
-              <span
-                key={tag.id}
-                className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-body font-medium"
-                style={{
-                  backgroundColor: `${tag.color}15`,
-                  color: tag.color,
-                  border: `1px solid ${tag.color}30`,
-                }}
-              >
-                {tag.name}
-              </span>
-            ))}
-          </div>
-        )}
 
         <div className="flex gap-2 mt-4 w-full">
           <button className="flex-1 h-10 rounded-xl bg-primary-600 text-white text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-primary-800 transition-colors">
@@ -146,6 +167,18 @@ export function ContactPanel({
         </div>
       </div>
 
+      {onSetTags && (
+        <div className="px-5 py-5 border-b border-border-subtle">
+          <ConversationTags
+            tags={conversationTags}
+            allTags={allTags}
+            allTagsLoading={allTagsLoading}
+            disabled={!canEditTags}
+            onChange={onSetTags}
+          />
+        </div>
+      )}
+
       <div className="px-5 py-5 flex-1">
         <h4 className="font-headline font-semibold text-sm text-txt-primary mb-4">
           Notas Internas
@@ -162,57 +195,110 @@ export function ContactPanel({
             />
             <button
               onClick={handleAddNote}
-              disabled={!trimmedNote}
+              disabled={!trimmedNote || isAddingNote}
               className="self-end h-9 px-4 rounded-lg bg-primary-600 text-txt-on-primary text-sm font-body font-medium hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Adicionar
+              {isAddingNote ? "Salvando..." : "Adicionar"}
             </button>
           </div>
 
-          {notes.map((note) => (
-            <div
-              key={note.id}
-              className="p-3 rounded-xl border border-border-subtle bg-surface-elevated"
-            >
-              <div className="flex items-center justify-between mb-1.5">
-                <span className="font-body font-semibold text-xs text-txt-primary">
-                  {note.userName}
-                </span>
-                <span className="text-[10px] text-txt-muted font-body">
-                  {new Date(note.createdAt).toLocaleDateString("pt-BR", {
-                    day: "2-digit",
-                    month: "short",
-                  })},{" "}
-                  {new Date(note.createdAt).toLocaleTimeString("pt-BR", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </span>
+          {notesLoading && (
+            <p className="text-xs text-txt-muted font-body">Carregando notas...</p>
+          )}
+          {notesError && (
+            <p className="text-xs text-danger font-body">{notesError}</p>
+          )}
+          {!notesLoading && !notesError && notes.length === 0 && (
+            <p className="text-xs text-txt-muted font-body">
+              Nenhuma nota ainda.
+            </p>
+          )}
+
+          {notes.map((note) => {
+            const canDelete =
+              !!onDeleteNote &&
+              (isManager || note.userId === currentUserId);
+            return (
+              <div
+                key={note.id}
+                className="p-3 rounded-xl border border-border-subtle bg-surface-elevated group"
+              >
+                <div className="flex items-center justify-between mb-1.5 gap-2">
+                  <span className="font-body font-semibold text-xs text-txt-primary truncate">
+                    {note.userName}
+                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-[10px] text-txt-muted font-body">
+                      {new Date(note.createdAt).toLocaleDateString("pt-BR", {
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                      ,{" "}
+                      {new Date(note.createdAt).toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                    {canDelete && (
+                      <button
+                        onClick={() => setNoteToDelete(note)}
+                        aria-label="Excluir nota"
+                        className="opacity-0 group-hover:opacity-100 focus:opacity-100 text-txt-muted hover:text-danger transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-xs text-txt-secondary font-body leading-relaxed whitespace-pre-wrap">
+                  {note.content}
+                </p>
               </div>
-              <p className="text-xs text-txt-secondary font-body leading-relaxed">
-                {note.content}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="px-5 pb-5 space-y-2 flex-shrink-0">
-        <button
-          onClick={() => setTransferOpen(true)}
-          className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors"
-        >
-          <ArrowRightLeft className="w-4 h-4" />
-          Transferir conversa
-        </button>
-        <button
-          onClick={() => setConfirmResolveOpen(true)}
-          disabled={isResolved}
-          className="w-full h-11 rounded-xl bg-primary-600 text-white text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-primary-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <CheckCircle2 className="w-4 h-4" />
-          {isResolved ? "Conversa resolvida" : "Resolver conversa"}
-        </button>
+        {canAssumeSelf && (
+          <button
+            onClick={onAssumeConversation}
+            disabled={isMutating}
+            className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors disabled:opacity-50"
+          >
+            <UserPlus className="w-4 h-4" />
+            Assumir conversa
+          </button>
+        )}
+        {canTransfer && (
+          <button
+            onClick={() => setTransferOpen(true)}
+            disabled={isMutating}
+            className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors disabled:opacity-50"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+            Transferir conversa
+          </button>
+        )}
+        {isResolved ? (
+          <button
+            onClick={onReopenConversation}
+            disabled={isMutating}
+            className="w-full h-11 rounded-xl border border-border-default text-txt-primary text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-surface-elevated transition-colors disabled:opacity-50"
+          >
+            <RotateCcw className="w-4 h-4" />
+            Reabrir conversa
+          </button>
+        ) : (
+          <button
+            onClick={() => setConfirmResolveOpen(true)}
+            disabled={isMutating}
+            className="w-full h-11 rounded-xl bg-primary-600 text-white text-sm font-body font-medium flex items-center justify-center gap-2 hover:bg-primary-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <CheckCircle2 className="w-4 h-4" />
+            Resolver conversa
+          </button>
+        )}
       </div>
 
       <TransferConversationSheet
@@ -231,6 +317,17 @@ export function ContactPanel({
         variant="primary"
         onConfirm={handleConfirmResolve}
         onCancel={handleCancelResolve}
+      />
+
+      <ConfirmDialog
+        open={noteToDelete !== null}
+        title="Excluir nota?"
+        description="A nota interna será removida. Essa ação não pode ser desfeita."
+        confirmLabel="Excluir"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={handleConfirmDeleteNote}
+        onCancel={() => setNoteToDelete(null)}
       />
     </div>
   );

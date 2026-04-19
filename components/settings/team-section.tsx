@@ -69,6 +69,7 @@ function StatusBadge({ status }: { status: TeamMemberStatus }) {
 interface MemberRowProps {
   member: TeamMember;
   isCurrentUser: boolean;
+  resendingId: string | null;
   onEdit: (member: TeamMember) => void;
   onRemove: (member: TeamMember) => void;
   onResendInvite: (member: TeamMember) => void;
@@ -77,6 +78,7 @@ interface MemberRowProps {
 function MemberRow({
   member,
   isCurrentUser,
+  resendingId,
   onEdit,
   onRemove,
   onResendInvite,
@@ -119,10 +121,11 @@ function MemberRow({
           {isPending && (
             <button
               onClick={() => onResendInvite(member)}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-medium hover:bg-primary-100 transition-colors"
+              disabled={resendingId === member.id}
+              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-primary-50 text-primary-600 text-xs font-medium hover:bg-primary-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <MailCheck className="w-3.5 h-3.5" />
-              Reenviar
+              {resendingId === member.id ? "Enviando..." : "Reenviar"}
             </button>
           )}
           <button
@@ -136,14 +139,14 @@ function MemberRow({
           </button>
           <button
             onClick={() => onRemove(member)}
-            disabled={isCurrentUser || isPending}
+            disabled={isCurrentUser}
             className="w-8 h-8 flex items-center justify-center rounded-lg bg-danger-light hover:bg-danger-light/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-            aria-label={`Remover ${member.name}`}
+            aria-label={isPending ? `Revogar convite de ${member.email}` : `Remover ${member.name}`}
             title={
               isCurrentUser
                 ? "Você não pode remover a si mesmo"
                 : isPending
-                  ? "Convite pendente — remoção indisponível"
+                  ? "Revogar convite"
                   : undefined
             }
           >
@@ -203,6 +206,39 @@ export function TeamSection() {
     },
     onError: (err) => {
       const msg = err instanceof ApiClientError ? err.message : "Falha ao remover";
+      toast.error(msg);
+    },
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: (inviteId: string) =>
+      apiFetch<{ revoked: boolean }>(`/api/team/invite/${inviteId}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      toast.success("Convite revogado");
+      invalidate();
+    },
+    onError: (err) => {
+      const msg =
+        err instanceof ApiClientError ? err.message : "Falha ao revogar convite";
+      toast.error(msg);
+    },
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: (inviteId: string) =>
+      apiFetch<{ id: string; email: string; expiresAt: string }>(
+        `/api/team/invite/${inviteId}/resend`,
+        { method: "POST" },
+      ),
+    onSuccess: (data) => {
+      toast.success(`Convite reenviado para ${data.email}`);
+      invalidate();
+    },
+    onError: (err) => {
+      const msg =
+        err instanceof ApiClientError ? err.message : "Falha ao reenviar convite";
       toast.error(msg);
     },
   });
@@ -268,14 +304,22 @@ export function TeamSection() {
 
   const handleConfirmRemove = useCallback(() => {
     if (!removeTarget) return;
-    removeMutation.mutate(removeTarget.id);
+    if (removeTarget.memberStatus === "PENDING") {
+      const inviteId = removeTarget.id.replace(/^invite:/, "");
+      revokeInviteMutation.mutate(inviteId);
+    } else {
+      removeMutation.mutate(removeTarget.id);
+    }
     setRemoveTarget(null);
-  }, [removeTarget, removeMutation]);
+  }, [removeTarget, removeMutation, revokeInviteMutation]);
 
-  const handleResendInvite = useCallback((member: TeamMember) => {
-    // Resend fica pro passo 15 — por ora, toast informativo.
-    toast.info(`Reenvio ainda não disponível para ${member.email}`);
-  }, []);
+  const handleResendInvite = useCallback(
+    (member: TeamMember) => {
+      const inviteId = member.id.replace(/^invite:/, "");
+      resendInviteMutation.mutate(inviteId);
+    },
+    [resendInviteMutation],
+  );
 
   const removeWouldLeaveNoAdmin =
     removeTarget?.role === "ADMIN" &&
@@ -361,16 +405,25 @@ export function TeamSection() {
                   </td>
                 </tr>
               )}
-              {!error && !isLoading && filteredMembers.map((member) => (
-                <MemberRow
-                  key={member.id}
-                  member={member}
-                  isCurrentUser={member.id === currentUserId}
-                  onEdit={handleEdit}
-                  onRemove={handleRequestRemove}
-                  onResendInvite={handleResendInvite}
-                />
-              ))}
+              {!error && !isLoading && filteredMembers.map((member) => {
+                // resendInviteMutation.variables = inviteId em flight. Reconstruir
+                // member.id (prefixado) pra comparar com member sem descascar
+                // o prefixo aqui.
+                const resendingId = resendInviteMutation.isPending
+                  ? `invite:${resendInviteMutation.variables}`
+                  : null;
+                return (
+                  <MemberRow
+                    key={member.id}
+                    member={member}
+                    isCurrentUser={member.id === currentUserId}
+                    resendingId={resendingId}
+                    onEdit={handleEdit}
+                    onRemove={handleRequestRemove}
+                    onResendInvite={handleResendInvite}
+                  />
+                );
+              })}
               {!error && !isLoading && filteredMembers.length === 0 && (
                 <tr>
                   <td colSpan={5} className="py-12 text-center text-sm text-txt-muted">
@@ -401,12 +454,21 @@ export function TeamSection() {
 
       <ConfirmDialog
         open={removeTarget !== null}
-        title="Remover membro"
+        title={
+          removeTarget?.memberStatus === "PENDING"
+            ? "Revogar convite"
+            : "Remover membro"
+        }
         description={
           removeWouldLeaveNoAdmin ? (
             <>
               Não é possível remover <strong>{removeTarget?.name}</strong>. Ele(a) é o
               último administrador ativo do workspace.
+            </>
+          ) : removeTarget?.memberStatus === "PENDING" ? (
+            <>
+              Tem certeza que deseja revogar o convite para{" "}
+              <strong>{removeTarget?.email}</strong>? O link ficará inválido imediatamente.
             </>
           ) : (
             <>
@@ -415,7 +477,13 @@ export function TeamSection() {
             </>
           )
         }
-        confirmLabel={removeWouldLeaveNoAdmin ? "Entendi" : "Remover"}
+        confirmLabel={
+          removeWouldLeaveNoAdmin
+            ? "Entendi"
+            : removeTarget?.memberStatus === "PENDING"
+              ? "Revogar"
+              : "Remover"
+        }
         cancelLabel={removeWouldLeaveNoAdmin ? "Fechar" : "Cancelar"}
         variant={removeWouldLeaveNoAdmin ? "primary" : "danger"}
         onConfirm={

@@ -109,6 +109,8 @@ model Workspace {
   instances     Instance[]
   contacts      Contact[]
   conversations Conversation[]
+  tags          Tag[]
+  quickReplies  QuickReply[]
 
   @@index([deletedAt])
 }
@@ -138,6 +140,7 @@ model User {
   assignedConversations Conversation[]
   sentMessages          Message[]           @relation("MessageSentBy")
   conversationEvents    ConversationEvent[] @relation("ConversationEventActor")
+  conversationNotes     ConversationNote[]
 
   @@index([workspaceId, email])
   @@index([workspaceId, role])
@@ -246,6 +249,7 @@ model Contact {
   workspace     Workspace      @relation(fields: [workspaceId], references: [id])
   assignedUser  User?          @relation(fields: [assignedUserId], references: [id])
   conversations Conversation[]
+  tags          ContactTag[]
 
   @@unique([workspaceId, phone])
   @@index([workspaceId, name])
@@ -278,6 +282,8 @@ model Conversation {
   assignedUser User?               @relation(fields: [assignedUserId], references: [id])
   messages     Message[]
   events       ConversationEvent[]
+  notes        ConversationNote[]
+  tags         ConversationTag[]
 
   @@index([workspaceId, lastMessageAt])
   @@index([assignedUserId, status])
@@ -335,6 +341,95 @@ model ConversationEvent {
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
   actor        User?        @relation("ConversationEventActor", fields: [actorId], references: [id])
+
+  @@index([conversationId, createdAt])
+}
+
+// ============================================================================
+// Tag — rótulo canônico do workspace. Nome único por workspace, cor de paleta
+// fechada (validada no service). Aplicada a contatos e conversas via pivots.
+// Delete cascata remove de contatos/conversas onde estiver aplicada.
+// ============================================================================
+
+model Tag {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  color       String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace     Workspace         @relation(fields: [workspaceId], references: [id])
+  contacts      ContactTag[]
+  conversations ConversationTag[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}
+
+// ============================================================================
+// QuickReply — resposta pré-definida do workspace (PRD 5.10). Shortcut único
+// case-insensitive (lower no create). Placeholders via `{{nome_variavel}}`.
+// `category` é string livre (PRD). `title` existe pra UI/listagem.
+// ============================================================================
+
+model QuickReply {
+  id          String   @id @default(cuid())
+  workspaceId String
+  shortcut    String
+  title       String
+  category    String?
+  content     String   @db.Text
+  mediaUrl    String?
+  mediaType   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([workspaceId, shortcut])
+  @@index([workspaceId, category])
+}
+
+model ContactTag {
+  contactId String
+  tagId     String
+  createdAt DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@index([tagId])
+}
+
+model ConversationTag {
+  conversationId String
+  tagId          String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tag          Tag          @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([conversationId, tagId])
+  @@index([tagId])
+}
+
+// ============================================================================
+// ConversationNote — nota interna de um atendente numa conversa (PRD 5.7).
+// Só a equipe vê. Autor pode deletar; ADMIN/SUPERVISOR também.
+// Cada create dispara ConversationEvent NOTE_ADDED pro histórico.
+// ============================================================================
+
+model ConversationNote {
+  id             String   @id @default(cuid())
+  conversationId String
+  userId         String
+  content        String   @db.Text
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
 
   @@index([conversationId, createdAt])
 }

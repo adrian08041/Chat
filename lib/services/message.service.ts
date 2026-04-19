@@ -16,6 +16,7 @@ import { prisma } from "@/lib/prisma";
 import { upsertContactFromInbound } from "@/lib/services/contact.service";
 import {
   appendEvent,
+  autoAssignIfUnassigned,
   findOrCreateActiveConversation,
   getActiveConversationForOutbound,
 } from "@/lib/services/conversation.service";
@@ -340,6 +341,12 @@ export async function sendMessage(params: {
       await tx.conversation.update({
         where: { id: conversation.id },
         data: { lastMessageAt: row.createdAt },
+      });
+      // Auto-assign: user que responde em conversa UNASSIGNED vira responsável.
+      // Idempotente — não afeta conversas já atribuídas.
+      await autoAssignIfUnassigned(tx, {
+        conversationId: conversation.id,
+        userId: params.userId,
       });
       await appendEvent(tx, {
         conversationId: conversation.id,
