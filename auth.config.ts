@@ -20,6 +20,10 @@ export default {
     maxAge: 60 * 60 * 24 * 30, // 30 dias
     updateAge: 60 * 60 * 24, // renova cookie se idade > 24h
   },
+  // Auth.js v5 só confia no Host header automaticamente em Vercel. Em
+  // Railway/VPS/Docker precisa `trustHost: true` ou env AUTH_TRUST_HOST=true.
+  // Sem isso: "There is a problem with the server configuration" no login.
+  trustHost: true,
   providers: [],
   callbacks: {
     authorized({ auth, request: { nextUrl } }) {

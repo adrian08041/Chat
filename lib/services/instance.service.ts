@@ -58,6 +58,45 @@ function buildWebhookUrl(webhookSecret: string): string {
   return `${base}/api/webhooks/uazapi/${webhookSecret}`;
 }
 
+// Traduz erros do UazApi do POST /instance/create em mensagens amigáveis.
+// Status + body da UazApi não são úteis pro usuário final — aqui a gente
+// mapeia os casos comuns (quota, auth) pra textos que explicam o problema.
+function translateUazApiCreateError(error: UazApiError): ApiError {
+  const body = (error.body ?? null) as {
+    info?: string;
+    error?: string;
+    current_instances?: number;
+    max_instances?: number;
+  } | null;
+
+  // 429 = "Maximum number of instances reached" — quota do servidor UazApi.
+  if (error.status === 429) {
+    const current = body?.current_instances;
+    const limit = body?.max_instances;
+    const message =
+      current !== undefined && limit !== undefined
+        ? `Limite de números do servidor WhatsApp atingido (${current}/${limit}). Remova números não utilizados ou contrate mais no painel UazApi.`
+        : "Limite de números do servidor WhatsApp atingido. Remova números não utilizados ou contrate mais no painel UazApi.";
+    return new ApiError(message, 409, body);
+  }
+
+  // 401/403 = admin token inválido/expirado.
+  if (error.status === 401 || error.status === 403) {
+    return new ApiError(
+      "Credenciais do servidor WhatsApp inválidas. Verifique UAZAPI_ADMIN_TOKEN nas configurações.",
+      502,
+      body,
+    );
+  }
+
+  // Default: repassa mensagem da UazApi com status 502 (bad gateway).
+  return new ApiError(
+    body?.info ?? body?.error ?? error.message ?? "Falha no servidor WhatsApp",
+    502,
+    body,
+  );
+}
+
 function requireOwned(instance: Instance | null, workspaceId: string): Instance {
   if (!instance || instance.workspaceId !== workspaceId || instance.deletedAt) {
     throw new ApiError("Instância não encontrada", 404);
@@ -98,7 +137,15 @@ export async function createInstance(
   const subdomain = resolveSubdomain(input.subdomain);
   const client = getUazApiClient();
 
-  const created = await client.createInstance({ name: input.name });
+  let created;
+  try {
+    created = await client.createInstance({ name: input.name });
+  } catch (error) {
+    if (error instanceof UazApiError) {
+      throw translateUazApiCreateError(error);
+    }
+    throw error;
+  }
   const webhookSecret = generateWebhookSecret();
 
   let row: Instance;

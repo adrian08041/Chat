@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { AvatarInitials } from "./avatar-initials";
 import { QuickReplyPopover } from "./quick-reply-popover";
+import { EmojiPickerPopover } from "./emoji-picker-popover";
 import { CONVERSATION_STATUS_LABELS, CONVERSATION_STATUS_COLORS } from "@/lib/constants";
 import { MOCK_QUICK_REPLIES } from "@/lib/mock-data";
 import type { Conversation } from "@/types/conversation";
@@ -98,6 +99,7 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
   const [inputValue, setInputValue] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
@@ -149,6 +151,28 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
     if (!text) return;
     onSendMessage(text);
     setInputValue("");
+  };
+
+  const handleSelectEmoji = (emoji: string) => {
+    const input = inputRef.current;
+    if (!input) {
+      setInputValue((v) => v + emoji);
+      setEmojiPickerOpen(false);
+      return;
+    }
+    const start = input.selectionStart ?? inputValue.length;
+    const end = input.selectionEnd ?? inputValue.length;
+    const next = inputValue.slice(0, start) + emoji + inputValue.slice(end);
+    setInputValue(next);
+    setEmojiPickerOpen(false);
+    // Mantém foco + posiciona cursor depois do emoji inserido.
+    requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      const pos = start + emoji.length;
+      el.setSelectionRange(pos, pos);
+    });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -342,9 +366,28 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
 
       <div className="px-5 py-3 border-t border-border-default bg-surface-card flex-shrink-0">
         <div className="flex items-center gap-2">
-          <button aria-label="Emoji" className="w-9 h-9 rounded-lg flex items-center justify-center text-txt-muted hover:text-txt-primary hover:bg-surface-elevated transition-colors">
-            <Smile className="w-5 h-5" />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="Emoji"
+              aria-expanded={emojiPickerOpen}
+              onClick={() => setEmojiPickerOpen((v) => !v)}
+              className={cn(
+                "w-9 h-9 rounded-lg flex items-center justify-center transition-colors",
+                emojiPickerOpen
+                  ? "text-primary-600 bg-primary-50"
+                  : "text-txt-muted hover:text-txt-primary hover:bg-surface-elevated",
+              )}
+            >
+              <Smile className="w-5 h-5" />
+            </button>
+            {emojiPickerOpen && (
+              <EmojiPickerPopover
+                onSelect={handleSelectEmoji}
+                onClose={() => setEmojiPickerOpen(false)}
+              />
+            )}
+          </div>
           <button aria-label="Anexar arquivo" className="w-9 h-9 rounded-lg flex items-center justify-center text-txt-muted hover:text-txt-primary hover:bg-surface-elevated transition-colors">
             <Paperclip className="w-5 h-5" />
           </button>
