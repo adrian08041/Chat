@@ -19,6 +19,8 @@ const ICON_MAP: Record<
   star: { Icon: Star, bg: "bg-secondary-50", color: "text-secondary-600" },
 };
 
+// `change` opcional — quando a métrica não tem baseline (sem dados no período
+// anterior) ou é omitida no MVP (satisfação, tempo médio), a chip some.
 export function ReportKpiCard({
   label,
   value,
@@ -38,18 +40,20 @@ export function ReportKpiCard({
           >
             <Icon className={`w-6 h-6 ${color}`} />
           </div>
-          <span
-            className={`flex items-center gap-1 text-xs font-bold ${
-              trendIsPositive ? "text-success" : "text-danger"
-            }`}
-          >
-            {trend === "up" ? (
-              <TrendingUp className="w-3.5 h-3.5" />
-            ) : (
-              <TrendingDown className="w-3.5 h-3.5" />
-            )}
-            {change}
-          </span>
+          {change && (
+            <span
+              className={`flex items-center gap-1 text-xs font-bold ${
+                trendIsPositive ? "text-success" : "text-danger"
+              }`}
+            >
+              {trend === "up" ? (
+                <TrendingUp className="w-3.5 h-3.5" />
+              ) : (
+                <TrendingDown className="w-3.5 h-3.5" />
+              )}
+              {change}
+            </span>
+          )}
         </div>
         <div>
           <p className="font-headline text-3xl font-bold text-txt-primary flex items-baseline gap-1">

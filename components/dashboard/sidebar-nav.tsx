@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { UserRole } from "@prisma/client";
 import {
   MessageSquare,
   LayoutGrid,
@@ -14,18 +15,34 @@ import {
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
-const NAV_ITEMS = [
+type NavItem = {
+  href: string;
+  icon: typeof MessageSquare;
+  label: string;
+  // Se presente, só managers (ADMIN/SUPERVISOR) veem o item.
+  managerOnly?: boolean;
+};
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/conversas", icon: MessageSquare, label: "Conversas" },
-  { href: "/dashboard", icon: LayoutGrid, label: "Dashboard" },
+  { href: "/dashboard", icon: LayoutGrid, label: "Dashboard", managerOnly: true },
   { href: "/contatos", icon: Users, label: "Contatos" },
   { href: "/numeros", icon: Phone, label: "Números" },
   { href: "/respostas-rapidas", icon: MessageCircle, label: "Respostas Rápidas" },
-  { href: "/relatorios", icon: BarChart3, label: "Relatórios" },
+  { href: "/relatorios", icon: BarChart3, label: "Relatórios", managerOnly: true },
   { href: "/configuracoes", icon: Settings, label: "Configurações" },
 ];
 
-export function SidebarNav() {
+interface SidebarNavProps {
+  // Role vem do server layout (sem flash de hydration). Client-only fallback
+  // via useSession era válido mas AGENT via items manager por ~100ms.
+  role: UserRole;
+}
+
+export function SidebarNav({ role }: SidebarNavProps) {
   const pathname = usePathname();
+  const isManager = role === "ADMIN" || role === "SUPERVISOR";
+  const visibleItems = NAV_ITEMS.filter((item) => !item.managerOnly || isManager);
 
   return (
     <TooltipProvider delay={200}>
@@ -35,7 +52,7 @@ export function SidebarNav() {
         </div>
 
         <nav className="flex flex-col items-center gap-1 flex-1" aria-label="Navegação principal">
-          {NAV_ITEMS.map((item) => {
+          {visibleItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
               <Tooltip key={item.href}>

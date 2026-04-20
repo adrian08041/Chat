@@ -38,9 +38,11 @@ export interface ReportKpiCardData {
   label: string;
   value: string;
   valueSuffix?: string;
-  change: string;
-  trend: "up" | "down";
-  trendIsPositive: boolean;
+  // Ausente quando não há baseline (sem dados no período anterior) ou quando
+  // a métrica ainda não é calculada (avgResponseTime/satisfaction no MVP).
+  change?: string;
+  trend?: "up" | "down";
+  trendIsPositive?: boolean;
   icon: ReportKpiIcon;
 }
 
