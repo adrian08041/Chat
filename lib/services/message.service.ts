@@ -13,6 +13,7 @@ import type {
 import { Prisma } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
+import { publish } from "@/lib/realtime";
 import { upsertContactFromInbound } from "@/lib/services/contact.service";
 import {
   appendEvent,
@@ -130,6 +131,11 @@ export async function persistInboundMessage(params: {
       });
       return created;
     });
+    publish(instance.workspaceId, {
+      type: "message:created",
+      conversationId: message.conversationId,
+      visibility: { assignedUserId: conversation.assignedUserId },
+    });
     return { outcome: "created", message };
   } catch (error) {
     if (
@@ -177,10 +183,22 @@ export async function updateMessageStatusByReference(params: {
     return existing;
   }
 
-  return prisma.message.update({
+  const updated = await prisma.message.update({
     where: { id: existing.id },
     data: { status: params.newStatus },
+    include: {
+      conversation: { select: { workspaceId: true, assignedUserId: true } },
+    },
   });
+  publish(updated.conversation.workspaceId, {
+    type: "message:updated",
+    conversationId: updated.conversationId,
+    messageId: updated.id,
+    visibility: { assignedUserId: updated.conversation.assignedUserId },
+  });
+  // Remove o include do objeto retornado pra não vazar pro contrato.
+  const { conversation: _conv, ...messageOnly } = updated;
+  return messageOnly;
 }
 
 // Compat: antigo nome, usado no smoke/webhook. Chama a versão nova sem trackId.
@@ -358,6 +376,26 @@ export async function sendMessage(params: {
         },
       });
       return row;
+    });
+
+    // Se convo era UNASSIGNED, autoAssign promoveu pra self; previous=null
+    // garante que todos os AGENTs (que viam "unassigned") refetchem a lista.
+    // Se já tinha assignee, o filter entrega só pro assignee atual + managers.
+    const wasUnassigned = conversation.assignedUserId === null;
+    const currentAssignee = conversation.assignedUserId ?? params.userId;
+    const visibility = {
+      assignedUserId: currentAssignee,
+      ...(wasUnassigned && { previousAssignedUserId: null }),
+    };
+    publish(params.workspaceId, {
+      type: "message:created",
+      conversationId: conversation.id,
+      visibility,
+    });
+    publish(params.workspaceId, {
+      type: "conversation:updated",
+      conversationId: conversation.id,
+      visibility,
     });
 
     return updated;

@@ -6,6 +6,7 @@
 import type { Instance, InstanceStatus } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
+import { publish } from "@/lib/realtime";
 import { findInstanceByWebhookSecret } from "@/lib/services/instance.service";
 import {
   persistInboundMessage,
@@ -66,6 +67,10 @@ async function handleConnection(
       ...(status === "CONNECTED" &&
         !instance.lastConnectedAt && { lastConnectedAt: new Date() }),
     },
+  });
+  publish(instance.workspaceId, {
+    type: "instance:updated",
+    instanceId: instance.id,
   });
   return undefined;
 }

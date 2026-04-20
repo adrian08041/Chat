@@ -7,6 +7,7 @@
 import type { ConversationNote, User } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
+import { publish } from "@/lib/realtime";
 import { appendEvent } from "./conversation.service";
 
 export type NoteDTO = {
@@ -85,7 +86,7 @@ export async function createConversationNote(
 
   // Access check + create + event na mesma tx fecha a corrida contra
   // transferência concorrente da conversa entre o check e o create.
-  const note = await prisma.$transaction(async (tx) => {
+  const { note, assignedUserId } = await prisma.$transaction(async (tx) => {
     const conv = await tx.conversation.findFirst({
       where: {
         id: input.conversationId,
@@ -114,7 +115,13 @@ export async function createConversationNote(
       actorId: input.userId,
       payload: { noteId: created.id },
     });
-    return created;
+    return { note: created, assignedUserId: conv.assignedUserId };
+  });
+
+  publish(input.workspaceId, {
+    type: "conversation:updated",
+    conversationId: input.conversationId,
+    visibility: { assignedUserId },
   });
 
   return toNoteDTO(note);
@@ -128,7 +135,9 @@ export async function deleteConversationNote(params: {
 }): Promise<void> {
   const note = await prisma.conversationNote.findFirst({
     where: { id: params.noteId },
-    include: { conversation: { select: { workspaceId: true } } },
+    include: {
+      conversation: { select: { workspaceId: true, assignedUserId: true } },
+    },
   });
   if (!note || note.conversation.workspaceId !== params.workspaceId) {
     throw new ApiError("Nota não encontrada", 404);
@@ -137,4 +146,9 @@ export async function deleteConversationNote(params: {
     throw new ApiError("Você só pode apagar suas próprias notas", 403);
   }
   await prisma.conversationNote.delete({ where: { id: params.noteId } });
+  publish(params.workspaceId, {
+    type: "conversation:updated",
+    conversationId: note.conversationId,
+    visibility: { assignedUserId: note.conversation.assignedUserId },
+  });
 }

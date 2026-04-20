@@ -20,6 +20,7 @@ import type {
 import { Prisma } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
+import { publish } from "@/lib/realtime";
 import { toPublicInstance, type InstancePublic } from "./instance.service";
 import type { TagDTO } from "./tag.service";
 
@@ -440,11 +441,11 @@ export type AssignConversationInput = {
 export async function assignConversation(
   input: AssignConversationInput,
 ): Promise<ConversationDetailDTO> {
-  await prisma.$transaction(async (tx) => {
+  const previousAssignedUserId = await prisma.$transaction(async (tx) => {
     const current = await loadConversationForMutation(tx, input);
 
     if (current.assignedUserId === input.newAssigneeId) {
-      return;
+      return current.assignedUserId;
     }
 
     if (input.newAssigneeId) {
@@ -485,6 +486,16 @@ export async function assignConversation(
         toUserId: input.newAssigneeId,
       },
     });
+    return current.assignedUserId;
+  });
+
+  publish(input.workspaceId, {
+    type: "conversation:updated",
+    conversationId: input.conversationId,
+    visibility: {
+      assignedUserId: input.newAssigneeId,
+      previousAssignedUserId,
+    },
   });
 
   return getConversationById({
@@ -531,7 +542,7 @@ export type ResolveConversationInput = {
 export async function resolveConversation(
   input: ResolveConversationInput,
 ): Promise<ConversationDetailDTO> {
-  await prisma.$transaction(async (tx) => {
+  const assignedUserId = await prisma.$transaction(async (tx) => {
     const current = await loadConversationForMutation(tx, input);
     if (current.status === "RESOLVED") {
       throw new ApiError("Conversa já está resolvida", 409);
@@ -545,6 +556,13 @@ export async function resolveConversation(
       type: "RESOLVED",
       actorId: input.actorId,
     });
+    return current.assignedUserId;
+  });
+
+  publish(input.workspaceId, {
+    type: "conversation:updated",
+    conversationId: input.conversationId,
+    visibility: { assignedUserId },
   });
 
   return getConversationById({
@@ -558,7 +576,7 @@ export type ReopenConversationInput = ResolveConversationInput;
 export async function reopenConversation(
   input: ReopenConversationInput,
 ): Promise<ConversationDetailDTO> {
-  await prisma.$transaction(async (tx) => {
+  const assignedUserId = await prisma.$transaction(async (tx) => {
     const current = await loadConversationForMutation(tx, input);
     if (current.status !== "RESOLVED") {
       throw new ApiError("Apenas conversas resolvidas podem ser reabertas", 409);
@@ -572,6 +590,13 @@ export async function reopenConversation(
       type: "REOPENED",
       actorId: input.actorId,
     });
+    return current.assignedUserId;
+  });
+
+  publish(input.workspaceId, {
+    type: "conversation:updated",
+    conversationId: input.conversationId,
+    visibility: { assignedUserId },
   });
 
   return getConversationById({

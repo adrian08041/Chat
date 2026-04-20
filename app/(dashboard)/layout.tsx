@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { TopHeader } from "@/components/dashboard/top-header";
+import { RealtimeProvider } from "@/components/realtime-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 export default async function DashboardLayout({
@@ -24,6 +25,7 @@ export default async function DashboardLayout({
         {children}
       </div>
       <Toaster position="top-right" richColors closeButton />
+      <RealtimeProvider />
     </div>
   );
 }

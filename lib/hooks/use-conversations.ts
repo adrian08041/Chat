@@ -16,8 +16,10 @@ import type { Message } from "@/types/message";
 import type { InternalNote } from "@/types/note";
 
 export const CONVERSATIONS_QUERY_KEY: QueryKey = ["conversations"];
-const LIST_REFETCH_MS = 10_000;
-const MESSAGES_REFETCH_MS = 10_000;
+// Real-time via SSE (passo 12) invalida as queries; polling fica como fallback
+// longo caso a conexão SSE caia sem o onerror ter forçado reconnect.
+const LIST_REFETCH_MS = 60_000;
+const MESSAGES_REFETCH_MS = 60_000;
 
 export type ConversationFilters = {
   status?: ConversationStatus;

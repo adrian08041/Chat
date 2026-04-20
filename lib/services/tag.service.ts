@@ -7,6 +7,7 @@ import type { Tag } from "@prisma/client";
 import { Prisma } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
+import { publish } from "@/lib/realtime";
 
 export const TAG_COLORS = [
   "#EF4444",
@@ -155,13 +156,13 @@ export async function setConversationTags(params: {
   actorId: string;
   tagIds: string[];
 }): Promise<TagDTO[]> {
-  return prisma.$transaction(async (tx) => {
+  const { tags, assignedUserId } = await prisma.$transaction(async (tx) => {
     const conv = await tx.conversation.findFirst({
       where: {
         id: params.conversationId,
         workspaceId: params.workspaceId,
       },
-      select: { id: true },
+      select: { id: true, assignedUserId: true },
     });
     if (!conv) {
       throw new ApiError("Conversa não encontrada", 404);
@@ -231,6 +232,17 @@ export async function setConversationTags(params: {
       include: { tag: true },
       orderBy: { tag: { name: "asc" } },
     });
-    return rows.map((r) => toTagDTO(r.tag));
+    return {
+      tags: rows.map((r) => toTagDTO(r.tag)),
+      assignedUserId: conv.assignedUserId,
+    };
   });
+
+  publish(params.workspaceId, {
+    type: "conversation:updated",
+    conversationId: params.conversationId,
+    visibility: { assignedUserId },
+  });
+
+  return tags;
 }
