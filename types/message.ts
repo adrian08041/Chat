@@ -12,14 +12,15 @@ export type MessageStatus =
 export interface Message {
   id: string;
   conversationId: string;
-  contactId: string;
   direction: MessageDirection;
   type: MessageType;
   content: string | null;
   mediaUrl: string | null;
-  mediaType: string | null;
+  mediaMimeType: string | null;
+  mediaFileName: string | null;
   status: MessageStatus;
-  whatsappMessageId: string | null;
+  uazapiMessageId: string | null;
+  uazapiTrackId: string | null;
   sentByUserId: string | null;
   createdAt: string;
 }

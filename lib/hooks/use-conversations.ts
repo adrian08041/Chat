@@ -81,10 +81,21 @@ export function useInvalidateConversations() {
     queryClient.invalidateQueries({ queryKey: CONVERSATIONS_QUERY_KEY });
 }
 
+export type SendMessagePayload =
+  | { type: "TEXT"; content: string; replyToMessageId?: string }
+  | {
+      type: "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT";
+      mediaUrl: string;
+      caption?: string;
+      mediaFileName?: string;
+      mediaMimeType?: string;
+      replyToMessageId?: string;
+    };
+
 export function useSendMessage(conversationId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (content: string) => {
+    mutationFn: (payload: SendMessagePayload) => {
       if (!conversationId) {
         throw new Error("Conversa não selecionada");
       }
@@ -92,7 +103,7 @@ export function useSendMessage(conversationId: string | null) {
         `/api/conversations/${conversationId}/messages`,
         {
           method: "POST",
-          body: JSON.stringify({ type: "TEXT", content }),
+          body: JSON.stringify(payload),
         },
       );
     },

@@ -74,7 +74,8 @@ export function QuickRepliesContent() {
       title: string;
       content: string;
       category: QuickReplyCategory;
-      hasMedia: boolean;
+      mediaUrl: string | null;
+      mediaType: string | null;
     }) => {
       try {
         if (sheetState.mode === "create") {
@@ -83,9 +84,8 @@ export function QuickRepliesContent() {
             title: data.title,
             content: data.content,
             category: data.category,
-            // MVP: placeholder quando hasMedia; upload real fica pro passo 14.
-            mediaUrl: data.hasMedia ? "/placeholder-media.png" : null,
-            mediaType: data.hasMedia ? "image/png" : null,
+            mediaUrl: data.mediaUrl,
+            mediaType: data.mediaType,
           });
           toast.success("Resposta criada");
         } else if (sheetState.mode === "edit") {
@@ -95,12 +95,8 @@ export function QuickRepliesContent() {
             title: data.title,
             content: data.content,
             category: data.category,
-            mediaUrl: data.hasMedia
-              ? sheetState.target.mediaUrl ?? "/placeholder-media.png"
-              : null,
-            mediaType: data.hasMedia
-              ? sheetState.target.mediaType ?? "image/png"
-              : null,
+            mediaUrl: data.mediaUrl,
+            mediaType: data.mediaType,
           });
           toast.success("Resposta atualizada");
         }

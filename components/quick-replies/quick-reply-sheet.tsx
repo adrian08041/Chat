@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { X, Upload, Trash2, Loader2, FileText } from "lucide-react";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -10,6 +11,8 @@ import {
   SheetFooter,
 } from "@/components/ui/sheet";
 import { QUICK_REPLY_CATEGORIES } from "@/lib/constants";
+import { useUploadFile } from "@/lib/hooks/use-uploads";
+import { ApiClientError } from "@/lib/api-client";
 import type { QuickReply, QuickReplyCategory } from "@/types/quick-reply";
 
 function normalizeShortcut(raw: string): string {
@@ -21,18 +24,21 @@ function normalizeShortcut(raw: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+export type QuickReplyFormData = {
+  shortcut: string;
+  title: string;
+  content: string;
+  category: QuickReplyCategory;
+  mediaUrl: string | null;
+  mediaType: string | null;
+};
+
 interface QuickReplyFormProps {
   mode: "create" | "edit";
   initial: QuickReply | null;
   existingShortcuts: Set<string>;
   onClose: () => void;
-  onSubmit: (data: {
-    shortcut: string;
-    title: string;
-    content: string;
-    category: QuickReplyCategory;
-    hasMedia: boolean;
-  }) => void;
+  onSubmit: (data: QuickReplyFormData) => void;
 }
 
 function QuickReplyForm({
@@ -48,7 +54,10 @@ function QuickReplyForm({
   const [category, setCategory] = useState<QuickReplyCategory>(
     (initial?.category as QuickReplyCategory) ?? "boas-vindas"
   );
-  const [hasMedia, setHasMedia] = useState(initial?.mediaUrl !== null && initial?.mediaUrl !== undefined);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(initial?.mediaUrl ?? null);
+  const [mediaType, setMediaType] = useState<string | null>(initial?.mediaType ?? null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadMutation = useUploadFile();
 
   const normalizedShortcut = normalizeShortcut(shortcut);
   const trimmedTitle = title.trim();
@@ -74,8 +83,31 @@ function QuickReplyForm({
       title: trimmedTitle,
       content: trimmedContent,
       category,
-      hasMedia,
+      mediaUrl,
+      mediaType,
     });
+  }
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const result = await uploadMutation.mutateAsync({
+        file,
+        scope: "quick-reply",
+      });
+      setMediaUrl(result.url);
+      setMediaType(result.mimeType);
+    } catch (err) {
+      const msg = err instanceof ApiClientError ? err.message : "Falha no upload";
+      toast.error(msg);
+    }
+  }
+
+  function handleRemoveMedia() {
+    setMediaUrl(null);
+    setMediaType(null);
   }
 
   const titleText = mode === "create" ? "Nova Resposta" : "Editar Resposta";
@@ -182,16 +214,63 @@ function QuickReplyForm({
         </div>
 
         {/* Mídia */}
-        <label className="flex items-center gap-2 cursor-pointer select-none">
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium text-txt-secondary">Mídia anexada</span>
           <input
-            type="checkbox"
-            checked={hasMedia}
-            onChange={(e) => setHasMedia(e.target.checked)}
-            className="w-4 h-4 rounded border-border-default text-primary-600 focus:ring-primary-400"
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*,audio/*,video/*,.pdf"
+            onChange={handleFileChange}
           />
-          <span className="text-sm text-txt-primary">Anexar mídia</span>
-          <span className="text-xs text-txt-muted">(placeholder)</span>
-        </label>
+          {mediaUrl ? (
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-surface-elevated border border-border-default">
+              {mediaType?.startsWith("image/") ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mediaUrl}
+                  alt="Preview"
+                  className="w-12 h-12 rounded object-cover flex-shrink-0"
+                />
+              ) : (
+                <div className="w-12 h-12 rounded flex items-center justify-center bg-surface-card flex-shrink-0">
+                  <FileText className="w-5 h-5 text-txt-muted" />
+                </div>
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-txt-primary truncate">{mediaType ?? "arquivo"}</p>
+                <p className="text-[10px] text-txt-muted truncate">{mediaUrl.split("/").pop()}</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRemoveMedia}
+                aria-label="Remover mídia"
+                className="w-8 h-8 flex items-center justify-center rounded-lg text-danger hover:bg-danger-light transition-colors"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadMutation.isPending}
+              className="flex items-center gap-2 h-10 px-3 rounded-lg border border-dashed border-border-default text-sm text-txt-secondary hover:border-primary-400 hover:text-primary-600 transition-colors disabled:opacity-50 disabled:cursor-wait"
+            >
+              {uploadMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Anexar mídia (opcional)
+                </>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
       <SheetFooter className="border-t border-border-default pt-4 flex flex-row gap-2">
@@ -219,13 +298,7 @@ interface QuickReplySheetProps {
   initial: QuickReply | null;
   existingShortcuts: Set<string>;
   onClose: () => void;
-  onSubmit: (data: {
-    shortcut: string;
-    title: string;
-    content: string;
-    category: QuickReplyCategory;
-    hasMedia: boolean;
-  }) => void;
+  onSubmit: (data: QuickReplyFormData) => void;
 }
 
 export function QuickReplySheet({

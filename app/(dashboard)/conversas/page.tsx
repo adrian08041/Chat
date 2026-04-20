@@ -20,6 +20,7 @@ import {
   useSendMessage,
   useSetConversationTags,
   type ConversationFilters,
+  type SendMessagePayload,
 } from "@/lib/hooks/use-conversations";
 import { useTags } from "@/lib/hooks/use-tags";
 import type { ConversationStatus } from "@/types/conversation";
@@ -79,21 +80,8 @@ export default function ConversationsPage() {
   // Backend retorna messages em ordem desc (newest first). UI exibe cronológica.
   const selectedMessages = useMemo(() => {
     if (!messagesResult) return [];
-    return [...messagesResult.items].reverse().map((m) => ({
-      id: m.id,
-      conversationId: m.conversationId,
-      contactId: detail?.contactId ?? "",
-      direction: m.direction,
-      type: m.type,
-      content: m.content,
-      mediaUrl: m.mediaUrl,
-      mediaType: m.mediaType,
-      status: m.status,
-      whatsappMessageId: m.whatsappMessageId,
-      sentByUserId: m.sentByUserId,
-      createdAt: m.createdAt,
-    }));
-  }, [messagesResult, detail?.contactId]);
+    return [...messagesResult.items].reverse();
+  }, [messagesResult]);
 
   const selectedConversation = useMemo(() => {
     if (!selectedConversationId) return null;
@@ -153,15 +141,18 @@ export default function ConversationsPage() {
     reopenMutation.isPending;
 
   const handleSendMessage = useCallback(
-    (content: string) => {
+    async (payload: SendMessagePayload) => {
       if (!selectedConversationId) return;
-      sendMutation.mutate(content, {
-        onError: (err) => {
-          const msg =
-            err instanceof ApiClientError ? err.message : "Falha ao enviar";
-          toast.error(msg);
-        },
-      });
+      try {
+        await sendMutation.mutateAsync(payload);
+      } catch (err) {
+        const msg =
+          err instanceof ApiClientError ? err.message : "Falha ao enviar";
+        toast.error(msg);
+        // Re-throw para o caller (MediaPreviewDialog) saber que falhou
+        // e não fechar — assim o usuário pode reenviar sem re-upload.
+        throw err;
+      }
     },
     [selectedConversationId, sendMutation],
   );

@@ -11,16 +11,21 @@ import {
   Mic,
   Send,
   CheckCheck,
-  ImageIcon,
+  FileText,
 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { AvatarInitials } from "./avatar-initials";
 import { QuickReplyPopover } from "./quick-reply-popover";
 import { EmojiPickerPopover } from "./emoji-picker-popover";
+import { MediaPreviewDialog } from "./media-preview-dialog";
 import { CONVERSATION_STATUS_LABELS, CONVERSATION_STATUS_COLORS } from "@/lib/constants";
 import { useQuickReplies } from "@/lib/hooks/use-quick-replies";
+import { useUploadFile } from "@/lib/hooks/use-uploads";
+import type { SendMessagePayload } from "@/lib/hooks/use-conversations";
+import { ApiClientError } from "@/lib/api-client";
 import type { Conversation } from "@/types/conversation";
-import type { Message } from "@/types/message";
+import type { Message, MessageType } from "@/types/message";
 import type { QuickReply } from "@/types/quick-reply";
 
 const QUICK_REPLY_PATTERN = /(?:^|\s)(\/[a-z0-9-]*)$/i;
@@ -48,7 +53,57 @@ interface ChatAreaProps {
   conversation: Conversation | null;
   messages: Message[];
   assigneeName: string;
-  onSendMessage: (content: string) => void;
+  onSendMessage: (payload: SendMessagePayload) => Promise<void>;
+}
+
+function detectMessageType(mime: string): Extract<
+  MessageType,
+  "IMAGE" | "AUDIO" | "VIDEO" | "DOCUMENT"
+> {
+  if (mime.startsWith("image/")) return "IMAGE";
+  if (mime.startsWith("audio/")) return "AUDIO";
+  if (mime.startsWith("video/")) return "VIDEO";
+  return "DOCUMENT";
+}
+
+function MessageMedia({ msg }: { msg: Message }) {
+  if (!msg.mediaUrl) return null;
+  if (msg.type === "IMAGE") {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={msg.mediaUrl}
+        alt={msg.mediaFileName ?? "Imagem"}
+        className="max-w-[320px] max-h-[320px] rounded-lg object-cover mb-1"
+      />
+    );
+  }
+  if (msg.type === "VIDEO") {
+    return (
+      <video
+        src={msg.mediaUrl}
+        controls
+        preload="metadata"
+        className="max-w-[320px] max-h-[320px] rounded-lg mb-1"
+      />
+    );
+  }
+  if (msg.type === "AUDIO") {
+    return <audio src={msg.mediaUrl} controls preload="metadata" className="mb-1" />;
+  }
+  return (
+    <a
+      href={msg.mediaUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-elevated hover:bg-primary-50 transition-colors mb-1"
+    >
+      <FileText className="w-5 h-5 text-primary-600" />
+      <span className="text-sm text-txt-primary font-body truncate max-w-[200px]">
+        {msg.mediaFileName ?? "Documento"}
+      </span>
+    </a>
+  );
 }
 
 function formatMessageTime(dateStr: string): string {
@@ -100,11 +155,14 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
   const [activeIndex, setActiveIndex] = useState(0);
   const [dismissed, setDismissed] = useState(false);
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
   const optionIdPrefix = useId();
 
+  const uploadMutation = useUploadFile();
   const { data: quickReplies = [] } = useQuickReplies();
   const trigger = findQuickReplyTrigger(inputValue);
   const triggerActive = trigger !== null;
@@ -150,8 +208,56 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
   const handleSend = () => {
     const text = inputValue.trim();
     if (!text) return;
-    onSendMessage(text);
+    onSendMessage({ type: "TEXT", content: text });
     setInputValue("");
+  };
+
+  const handleAttachClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    // Reset antes de sair pra permitir re-selecionar o mesmo arquivo depois.
+    e.target.value = "";
+    if (!file) return;
+    // Não sobe ainda — abre o preview dialog. Upload só rola no onConfirm,
+    // assim "cancelar" não deixa arquivo órfão no R2.
+    setPendingFile(file);
+  };
+
+  const handleConfirmMedia = async (caption: string) => {
+    const file = pendingFile;
+    if (!file) return;
+
+    let result;
+    try {
+      result = await uploadMutation.mutateAsync({ file, scope: "chat" });
+    } catch (err) {
+      const msg = err instanceof ApiClientError ? err.message : "Falha no upload";
+      toast.error(msg);
+      return;
+    }
+
+    const messageType = detectMessageType(result.mimeType);
+    const payload: SendMessagePayload = {
+      type: messageType,
+      mediaUrl: result.url,
+      mediaMimeType: result.mimeType,
+      ...(result.fileName && { mediaFileName: result.fileName }),
+      ...(caption && { caption }),
+    };
+
+    try {
+      await onSendMessage(payload);
+      setPendingFile(null);
+    } catch {
+      // Parent já mostrou toast; dialog permanece aberto pra retry sem re-upload.
+    }
+  };
+
+  const handleCancelMedia = () => {
+    setPendingFile(null);
   };
 
   const handleSelectEmoji = (emoji: string) => {
@@ -318,7 +424,7 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
 
           const msg = item.msg!;
           const isOutbound = msg.direction === "OUTBOUND";
-          const isImage = msg.type === "IMAGE";
+          const hasMedia = msg.type !== "TEXT" && msg.mediaUrl;
 
           return (
             <div
@@ -340,11 +446,8 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
                     : "bg-surface-card rounded-tl-md"
                 )}
               >
-                {isImage ? (
-                  <div className="w-[260px] h-[180px] rounded-lg bg-surface-elevated flex items-center justify-center mb-1">
-                    <ImageIcon className="w-10 h-10 text-txt-muted" />
-                  </div>
-                ) : (
+                {hasMedia && <MessageMedia msg={msg} />}
+                {msg.content && (
                   <p className="text-sm text-txt-primary font-body leading-relaxed">
                     {msg.content}
                   </p>
@@ -389,7 +492,19 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
               />
             )}
           </div>
-          <button aria-label="Anexar arquivo" className="w-9 h-9 rounded-lg flex items-center justify-center text-txt-muted hover:text-txt-primary hover:bg-surface-elevated transition-colors">
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt,.csv"
+            onChange={handleFileChange}
+          />
+          <button
+            type="button"
+            aria-label="Anexar arquivo"
+            onClick={handleAttachClick}
+            className="w-9 h-9 rounded-lg flex items-center justify-center text-txt-muted hover:text-txt-primary hover:bg-surface-elevated transition-colors"
+          >
             <Paperclip className="w-5 h-5" />
           </button>
           <div className="flex-1 relative">
@@ -436,6 +551,13 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
           )}
         </div>
       </div>
+
+      <MediaPreviewDialog
+        file={pendingFile}
+        sending={uploadMutation.isPending}
+        onCancel={handleCancelMedia}
+        onConfirm={handleConfirmMedia}
+      />
     </div>
   );
 }
