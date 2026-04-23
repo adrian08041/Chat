@@ -12,7 +12,13 @@ export type {
   MessageType,
   MessageStatus,
 } from "./message";
-export type { Contact, ContactTableRow, ConversaHistorico, NotaInterna } from "./contact";
+export type {
+  Contact,
+  ContactAssignedUser,
+  ContactListItem,
+  ContactsPage,
+  NotaInterna,
+} from "./contact";
 export type { WhatsAppInstance, InstanceStatus, ConnectInstanceResult } from "./instance";
 export type { User, UserRole, UserStatus, TeamMember, TeamMemberStatus } from "./user";
 export type { Tag } from "./tag";

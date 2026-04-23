@@ -51,6 +51,25 @@ function toInviteMemberDTO(invite: Invite): TeamMemberDTO {
   };
 }
 
+// DTO leve sem email — usado em dropdowns ("Responsável", etc.) onde
+// qualquer role autenticada precisa ver os usuários ativos do workspace.
+export type WorkspaceUserDTO = {
+  id: string;
+  name: string;
+  avatarUrl: string | null;
+};
+
+export async function listWorkspaceUsers(
+  workspaceId: string,
+): Promise<WorkspaceUserDTO[]> {
+  const users = await prisma.user.findMany({
+    where: { workspaceId, deletedAt: null },
+    select: { id: true, name: true, avatarUrl: true },
+    orderBy: { name: "asc" },
+  });
+  return users;
+}
+
 export async function listTeamMembers(
   workspaceId: string,
 ): Promise<TeamMemberDTO[]> {
