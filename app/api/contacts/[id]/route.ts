@@ -26,6 +26,7 @@ const patchSchema = z
     assignedUserId: z.string().trim().min(1).nullable().optional(),
     tagIds: z.array(z.string().trim().min(1)).max(20).optional(),
     source: z.string().trim().max(120).nullable().optional(),
+    notes: z.string().trim().max(5000).nullable().optional(),
   })
   .refine(
     (v) =>
@@ -34,7 +35,8 @@ const patchSchema = z
       v.email !== undefined ||
       v.assignedUserId !== undefined ||
       v.tagIds !== undefined ||
-      v.source !== undefined,
+      v.source !== undefined ||
+      v.notes !== undefined,
     { message: "Informe ao menos um campo" },
   );
 

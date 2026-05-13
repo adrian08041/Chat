@@ -31,6 +31,7 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  const [notes, setNotes] = useState("");
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [agentId, setAgentId] = useState<string>(NO_RESPONSAVEL);
   const [phoneError, setPhoneError] = useState<string | null>(null);
@@ -65,6 +66,7 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
         name: trimmedName,
         phone: trimmedPhone,
         email: trimmedEmail || null,
+        notes: notes.trim() || null,
         tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
         assignedUserId: agentId === NO_RESPONSAVEL ? null : agentId,
       },
@@ -161,6 +163,21 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
             }`}
           />
           {emailError && <p className="text-xs text-danger">{emailError}</p>}
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="new-contact-notes" className="text-xs font-medium text-txt-secondary">
+            Observações <span className="text-txt-muted font-normal">(opcional)</span>
+          </label>
+          <textarea
+            id="new-contact-notes"
+            rows={3}
+            maxLength={5000}
+            placeholder="Observações gerais sobre este contato…"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="px-3 py-2 rounded-lg bg-surface-elevated border border-border-default text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all resize-none"
+          />
         </div>
 
         <div className="flex flex-col gap-2">

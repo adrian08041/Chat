@@ -17,7 +17,9 @@ export type {
   ContactAssignedUser,
   ContactListItem,
   ContactsPage,
-  NotaInterna,
+  ContactConversationItem,
+  ContactNoteItem,
+  ContactProfile,
 } from "./contact";
 export type { WhatsAppInstance, InstanceStatus, ConnectInstanceResult } from "./instance";
 export type { User, UserRole, UserStatus, TeamMember, TeamMemberStatus } from "./user";

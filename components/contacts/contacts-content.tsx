@@ -10,7 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ContactProfileDrawer } from "@/components/contacts/contact-profile-drawer";
 import { NewContactSheet } from "@/components/contacts/new-contact-sheet";
 import { formatRelativeTime } from "@/lib/format";
-import { useContacts, useDeleteContact } from "@/lib/hooks/use-contacts";
+import { useContacts, useDeleteContact, useUpdateContact } from "@/lib/hooks/use-contacts";
 import { useTags } from "@/lib/hooks/use-tags";
 import { ApiClientError } from "@/lib/api-client";
 import type { ContactListItem } from "@/types/contact";
@@ -150,6 +150,7 @@ export function ContactsContent() {
   });
 
   const deleteMutation = useDeleteContact();
+  const updateMutation = useUpdateContact();
 
   const items = useMemo<ContactListItem[]>(
     () => data?.pages.flatMap((p) => p.items) ?? [],
@@ -366,6 +367,10 @@ export function ContactsContent() {
         }}
         onDelete={() => {
           if (selected) handleDelete(selected);
+        }}
+        onUpdate={async (partial) => {
+          if (!selected) return;
+          await updateMutation.mutateAsync({ id: selected.id, ...partial });
         }}
       />
 

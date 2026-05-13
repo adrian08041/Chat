@@ -31,6 +31,7 @@ export type ContactListItemDTO = {
   email: string | null;
   avatarUrl: string | null;
   source: string | null;
+  notes: string | null;
   assignedUserId: string | null;
   assignedUser: ContactAssignedUserDTO | null;
   tags: ContactTagDTO[];
@@ -74,6 +75,7 @@ function toListItemDTO(
     email: contact.email,
     avatarUrl: contact.avatarUrl,
     source: contact.source,
+    notes: contact.notes,
     assignedUserId: contact.assignedUserId,
     assignedUser: contact.assignedUser
       ? {
@@ -243,6 +245,7 @@ export type CreateContactInput = {
   assignedUserId?: string | null;
   tagIds?: string[];
   source?: string | null;
+  notes?: string | null;
 };
 
 export async function createContact(
@@ -256,6 +259,7 @@ export async function createContact(
 
   const email = input.email?.trim() || null;
   const source = input.source?.trim() || null;
+  const notes = input.notes?.trim() || null;
   const tagIds = input.tagIds ?? [];
 
   // Valida FK de responsável e tags ANTES de inserir pra dar erro semântico
@@ -286,6 +290,7 @@ export async function createContact(
         phone,
         email,
         source,
+        notes,
         assignedUserId: input.assignedUserId ?? null,
         tags: tagIds.length > 0
           ? { create: tagIds.map((tagId) => ({ tagId })) }
@@ -323,6 +328,7 @@ export type UpdateContactInput = {
   assignedUserId?: string | null;
   tagIds?: string[];
   source?: string | null;
+  notes?: string | null;
 };
 
 export async function updateContact(
@@ -351,6 +357,9 @@ export async function updateContact(
   }
   if (input.source !== undefined) {
     data.source = input.source?.trim() || null;
+  }
+  if (input.notes !== undefined) {
+    data.notes = input.notes?.trim() || null;
   }
   if (input.assignedUserId !== undefined) {
     if (input.assignedUserId) {
@@ -456,4 +465,108 @@ export async function deleteContact(params: {
 
   // ContactTag tem onDelete: Cascade no schema — some junto.
   await prisma.contact.delete({ where: { id: existing.id } });
+}
+
+// ============================================================================
+// Profile — contato + timeline de conversas + notas agregadas
+// ============================================================================
+
+export type ContactProfileConversationDTO = {
+  id: string;
+  instanceId: string;
+  instanceName: string;
+  instanceColor: string;
+  assignedUserName: string | null;
+  status: "UNASSIGNED" | "OPEN" | "WAITING_CUSTOMER" | "RESOLVED" | "REOPENED";
+  unreadCount: number;
+  lastMessageAt: string | null;
+  lastMessage: {
+    content: string | null;
+    direction: "INBOUND" | "OUTBOUND";
+    createdAt: string;
+  } | null;
+  messagesCount: number;
+  createdAt: string;
+  resolvedAt: string | null;
+};
+
+export type ContactProfileNoteDTO = {
+  id: string;
+  conversationId: string;
+  userId: string;
+  userName: string;
+  content: string;
+  createdAt: string;
+};
+
+export type ContactProfileDTO = {
+  contact: ContactListItemDTO;
+  conversations: ContactProfileConversationDTO[];
+  notes: ContactProfileNoteDTO[];
+};
+
+export async function getContactProfile(params: {
+  workspaceId: string;
+  id: string;
+}): Promise<ContactProfileDTO> {
+  const contact = await getContact(params);
+
+  const conversations = await prisma.conversation.findMany({
+    where: { workspaceId: params.workspaceId, contactId: params.id },
+    orderBy: [{ lastMessageAt: "desc" }, { createdAt: "desc" }],
+    take: 100,
+    include: {
+      instance: { select: { id: true, name: true, color: true } },
+      assignedUser: { select: { id: true, name: true } },
+      messages: {
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { content: true, direction: true, createdAt: true },
+      },
+      _count: { select: { messages: true } },
+    },
+  });
+
+  const conversationIds = conversations.map((c) => c.id);
+
+  const notes = conversationIds.length > 0
+    ? await prisma.conversationNote.findMany({
+        where: { conversationId: { in: conversationIds } },
+        orderBy: { createdAt: "desc" },
+        take: 200,
+        include: { user: { select: { id: true, name: true } } },
+      })
+    : [];
+
+  return {
+    contact,
+    conversations: conversations.map((c) => ({
+      id: c.id,
+      instanceId: c.instanceId,
+      instanceName: c.instance.name,
+      instanceColor: c.instance.color,
+      assignedUserName: c.assignedUser?.name ?? null,
+      status: c.status,
+      unreadCount: c.unreadCount,
+      lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
+      lastMessage: c.messages[0]
+        ? {
+            content: c.messages[0].content,
+            direction: c.messages[0].direction,
+            createdAt: c.messages[0].createdAt.toISOString(),
+          }
+        : null,
+      messagesCount: c._count.messages,
+      createdAt: c.createdAt.toISOString(),
+      resolvedAt: c.resolvedAt?.toISOString() ?? null,
+    })),
+    notes: notes.map((n) => ({
+      id: n.id,
+      conversationId: n.conversationId,
+      userId: n.userId,
+      userName: n.user.name,
+      content: n.content,
+      createdAt: n.createdAt.toISOString(),
+    })),
+  };
 }

@@ -14,6 +14,7 @@ const postSchema = z.object({
   assignedUserId: z.string().trim().min(1).nullable().optional(),
   tagIds: z.array(z.string().trim().min(1)).max(20).optional(),
   source: z.string().trim().max(120).nullable().optional(),
+  notes: z.string().trim().max(5000).nullable().optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
       assignedUserId: body.assignedUserId ?? null,
       tagIds: body.tagIds,
       source: body.source ?? null,
+      notes: body.notes ?? null,
     });
     return ok(created, { status: 201 });
   } catch (error) {

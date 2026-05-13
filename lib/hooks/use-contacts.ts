@@ -8,7 +8,7 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
-import type { ContactListItem, ContactsPage } from "@/types/contact";
+import type { ContactListItem, ContactsPage, ContactProfile } from "@/types/contact";
 
 export const CONTACTS_QUERY_KEY: QueryKey = ["contacts"];
 
@@ -46,6 +46,14 @@ export function useContact(id: string | null) {
   });
 }
 
+export function useContactProfile(id: string | null) {
+  return useQuery({
+    queryKey: [...CONTACTS_QUERY_KEY, "profile", id],
+    queryFn: () => apiFetch<ContactProfile>(`/api/contacts/${id}/profile`),
+    enabled: id !== null,
+  });
+}
+
 export type ContactUpsertPayload = {
   name: string;
   phone: string;
@@ -53,6 +61,7 @@ export type ContactUpsertPayload = {
   assignedUserId?: string | null;
   tagIds?: string[];
   source?: string | null;
+  notes?: string | null;
 };
 
 export function useCreateContact() {
