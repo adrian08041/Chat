@@ -6,6 +6,7 @@ import { AvatarInitials } from "./avatar-initials";
 import { TransferConversationSheet } from "./transfer-conversation-sheet";
 import { ConversationTags } from "./conversation-tags";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import type { Contact } from "@/types/contact";
 import type { InternalNote } from "@/types/note";
 import type { Tag } from "@/types/tag";
@@ -139,7 +140,7 @@ export function ContactPanel({
       <div className="flex flex-col items-center pt-8 pb-5 px-5 border-b border-border-subtle">
         <AvatarInitials name={contact.name} size="xl" />
         <h3 className="font-headline font-bold text-lg text-txt-primary mt-3">
-          {contact.name ?? "Sem nome"}
+          {getContactDisplayName(contact) || "Sem nome"}
         </h3>
         <p className="text-sm text-txt-muted font-body">{contact.phone}</p>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   QrCode,
   Pencil,
@@ -9,17 +9,23 @@ import {
   Loader2,
   Phone,
   AlertTriangle,
+  Download,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 import { EditNumberDrawer } from "@/components/numbers/edit-number-drawer";
 import { QrCodeSheet } from "@/components/numbers/qr-code-sheet";
 import { ConnectNumberSheet } from "@/components/numbers/connect-number-sheet";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ApiClientError } from "@/lib/api-client";
 import {
+  useCancelSyncContacts,
   useDeleteInstance,
   useDisconnectInstance,
   useInstances,
+  useStartSyncContacts,
+  useSyncContactsStatus,
 } from "@/lib/hooks/use-instances";
 import type { InstanceStatus, WhatsAppInstance } from "@/types/instance";
 
@@ -130,7 +136,162 @@ function NumberCard({
           <Trash2 className="w-4 h-4 text-danger" />
         </button>
       </div>
+
+      {isConnected && <SyncContactsRow instanceId={instance.id} />}
     </div>
+  );
+}
+
+function SyncContactsRow({ instanceId }: { instanceId: string }) {
+  const queryClient = useQueryClient();
+  // Status query só liga após primeiro click — evita GET inicial em cada card
+  // connected do /numeros. Uma vez habilitada, fica até desmontar.
+  const [statusEnabled, setStatusEnabled] = useState(false);
+  const { data } = useSyncContactsStatus(instanceId, { enabled: statusEnabled });
+  const startMutation = useStartSyncContacts();
+  const cancelMutation = useCancelSyncContacts();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const job = data?.job ?? null;
+  const isRunning = job?.status === "running";
+
+  // Detecta transições terminais pra invalidar contacts e mostrar toast.
+  const prevStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if (prev === "running") {
+      if (job?.status === "done") {
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+        toast.success(
+          `Importação concluída: ${job.imported} novos, ${job.updated} atualizados${
+            job.skipped > 0 ? `, ${job.skipped} pulados` : ""
+          }`,
+        );
+      } else if (job?.status === "cancelled") {
+        queryClient.invalidateQueries({ queryKey: ["contacts"] });
+        toast.info(
+          `Importação cancelada: ${job.imported} novos, ${job.updated} atualizados antes de parar`,
+        );
+      } else if (job?.status === "error") {
+        toast.error(
+          `Falha ao importar: ${job.errorMessage ?? "erro desconhecido"}`,
+        );
+      }
+    }
+    prevStatusRef.current = job?.status ?? null;
+  }, [
+    job?.status,
+    job?.imported,
+    job?.updated,
+    job?.skipped,
+    job?.errorMessage,
+    queryClient,
+  ]);
+
+  const handleConfirmStart = useCallback(() => {
+    setConfirmOpen(false);
+    setStatusEnabled(true);
+    startMutation.mutate(instanceId, {
+      onSuccess: (result) => {
+        if (result.alreadyRunning) {
+          toast.info("Importação já em andamento");
+        } else {
+          toast.info("Importação iniciada");
+        }
+      },
+      onError: (err) => {
+        const message =
+          err instanceof ApiClientError
+            ? err.message
+            : "Falha ao iniciar importação";
+        toast.error(message);
+      },
+    });
+  }, [instanceId, startMutation]);
+
+  const handleCancel = useCallback(() => {
+    cancelMutation.mutate(instanceId, {
+      onError: (err) => {
+        const message =
+          err instanceof ApiClientError
+            ? err.message
+            : "Falha ao cancelar importação";
+        toast.error(message);
+      },
+    });
+  }, [instanceId, cancelMutation]);
+
+  const progressPct =
+    isRunning && job && job.total > 0
+      ? Math.min(100, Math.round((job.fetched / job.total) * 100))
+      : 0;
+
+  return (
+    <>
+      <div className="pt-3 border-t border-border-subtle">
+        {isRunning ? (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-xs text-txt-secondary">
+              <span className="inline-flex items-center gap-1.5">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                Importando contatos…
+              </span>
+              <span className="font-medium">
+                {job.fetched}
+                {job.total > 0 ? ` / ${job.total}` : ""}
+              </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-surface-elevated overflow-hidden">
+              <div
+                className="h-full bg-primary-600 transition-[width] duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <button
+              onClick={handleCancel}
+              disabled={cancelMutation.isPending}
+              className="w-full h-8 rounded-lg border border-border-default bg-surface-card text-xs font-medium text-txt-secondary hover:bg-surface-elevated transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+            >
+              {cancelMutation.isPending ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <X className="w-3 h-3" />
+              )}
+              Cancelar importação
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={startMutation.isPending}
+            className="w-full h-9 rounded-lg border border-border-default bg-surface-card text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+          >
+            {startMutation.isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Download className="w-3.5 h-3.5" />
+            )}
+            Importar contatos
+          </button>
+        )}
+      </div>
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title="Importar contatos do WhatsApp"
+        description={
+          <>
+            Vai importar todos os contatos das conversas deste número. Contatos
+            já existentes mantêm o nome editado; foto de perfil é atualizada.
+            Pode levar alguns minutos.
+          </>
+        }
+        confirmLabel="Importar"
+        cancelLabel="Cancelar"
+        variant="primary"
+        onConfirm={handleConfirmStart}
+        onCancel={() => setConfirmOpen(false)}
+      />
+    </>
   );
 }
 

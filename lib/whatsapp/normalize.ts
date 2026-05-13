@@ -196,7 +196,10 @@ function normalizePresence(value: unknown): WhatsAppPresence {
 }
 
 // Normaliza JID/phone: "5511999999999@s.whatsapp.net" → "5511999999999".
-function stripJidSuffix(value: string | null): string | null {
+// Aceita undefined pra simplificar callers que leem de objetos parciais.
+export function stripJidSuffix(
+  value: string | null | undefined,
+): string | null {
   if (!value) return null;
   const at = value.indexOf("@");
   return at >= 0 ? value.slice(0, at) : value;

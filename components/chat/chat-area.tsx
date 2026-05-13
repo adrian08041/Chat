@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import { AvatarInitials } from "./avatar-initials";
 import { QuickReplyPopover } from "./quick-reply-popover";
 import { EmojiPickerPopover } from "./emoji-picker-popover";
@@ -332,7 +333,7 @@ export function ChatArea({ conversation, messages, assigneeName, onSendMessage }
     );
   }
 
-  const contactName = conversation.contact.name ?? conversation.contact.phone ?? "Contato";
+  const contactName = getContactDisplayName(conversation.contact) || "Contato";
   const contactPhone = conversation.contact.phone;
   const statusLabel = CONVERSATION_STATUS_LABELS[conversation.status] ?? conversation.status;
 

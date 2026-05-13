@@ -7,6 +7,37 @@ const DEFAULT_WORKSPACE_SLUG = "default";
 const DEFAULT_WORKSPACE_NAME = "My App";
 const FALLBACK_ADMIN_EMAIL = "admin@local.test";
 const FALLBACK_ADMIN_PASSWORD = "admin123";
+const FALLBACK_AGENT_EMAIL = "vendedor@local.test";
+const FALLBACK_AGENT_PASSWORD = "vendedor123";
+
+async function ensureUser(params: {
+  workspaceId: string;
+  email: string;
+  password: string;
+  name: string;
+  role: UserRole;
+}) {
+  const existing = await prisma.user.findUnique({
+    where: { email: params.email },
+  });
+
+  if (existing) {
+    console.log(`[seed] ${params.role.toLowerCase()} já existe (${params.email}) — skip`);
+    return;
+  }
+
+  const passwordHash = await hashPassword(params.password);
+  await prisma.user.create({
+    data: {
+      workspaceId: params.workspaceId,
+      email: params.email,
+      name: params.name,
+      passwordHash,
+      role: params.role,
+    },
+  });
+  console.log(`[seed] ${params.role.toLowerCase()} criado: ${params.email} (senha: ${params.password})`);
+}
 
 async function main() {
   const isProd = process.env.NODE_ENV === "production";
@@ -33,33 +64,30 @@ async function main() {
     },
   });
 
-  const existingAdmin = await prisma.user.findUnique({
-    where: { email: adminEmail },
-  });
-
-  if (existingAdmin) {
-    console.log(`[seed] admin já existe (${adminEmail}) — nada a fazer`);
-    return;
-  }
-
-  const passwordHash = await hashPassword(adminPassword);
-
-  await prisma.user.create({
-    data: {
-      workspaceId: workspace.id,
-      email: adminEmail,
-      name: "Admin",
-      passwordHash,
-      role: UserRole.ADMIN,
-    },
-  });
-
   console.log(`[seed] workspace: ${workspace.slug} (${workspace.id})`);
-  console.log(`[seed] admin criado: ${adminEmail}`);
+
+  await ensureUser({
+    workspaceId: workspace.id,
+    email: adminEmail,
+    password: adminPassword,
+    name: "Admin",
+    role: UserRole.ADMIN,
+  });
+
+  // Vendedor (AGENT) — só em dev, nunca em prod
+  if (!isProd) {
+    await ensureUser({
+      workspaceId: workspace.id,
+      email: FALLBACK_AGENT_EMAIL,
+      password: FALLBACK_AGENT_PASSWORD,
+      name: "Vendedor",
+      role: UserRole.AGENT,
+    });
+  }
 
   if (usingFallback) {
     console.log(
-      `[seed] ATENÇÃO: usando credenciais de fallback (somente dev). Senha: ${FALLBACK_ADMIN_PASSWORD}`,
+      `[seed] ATENÇÃO: usando credenciais de fallback (somente dev).`,
     );
     console.log(
       "[seed] Em outros ambientes defina SEED_ADMIN_EMAIL e SEED_ADMIN_PASSWORD",

@@ -8,15 +8,19 @@ import {
   type CreateInstanceParams,
   type CreateInstanceResult,
   type InstanceStatusResult,
+  type ListChatsParams,
+  type ListChatsResult,
   type SendMediaParams,
   type SendResult,
   type SendTextParams,
   type SetWebhookParams,
+  type UazApiChat,
   type UazApiClient,
   type UazApiInstanceCredentials,
   UazApiError,
   type UpdateDelayParams,
 } from "../uazapi";
+import { stripJidSuffix } from "../whatsapp/normalize";
 import type { WhatsAppConnectionStatus } from "../whatsapp/types";
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -40,6 +44,35 @@ function pick(source: unknown, ...keys: string[]): unknown {
   return undefined;
 }
 
+function pickNumber(source: unknown, ...keys: string[]): number | null {
+  if (!isObject(source)) return null;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+  }
+  return null;
+}
+
+function pickBoolean(source: unknown, key: string): boolean | null {
+  if (!isObject(source)) return null;
+  const value = source[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function toUazApiChat(raw: Record<string, unknown>): UazApiChat {
+  return {
+    wa_chatid: pickString(raw, "wa_chatid"),
+    phone: pickString(raw, "phone"),
+    wa_contactName: pickString(raw, "wa_contactName"),
+    wa_name: pickString(raw, "wa_name"),
+    name: pickString(raw, "name"),
+    image: pickString(raw, "image"),
+    imagePreview: pickString(raw, "imagePreview"),
+    wa_isGroup: pickBoolean(raw, "wa_isGroup"),
+    wa_lastMsgTimestamp: pickNumber(raw, "wa_lastMsgTimestamp"),
+  };
+}
+
 function normalizeConnectionStatus(value: unknown): WhatsAppConnectionStatus {
   if (typeof value !== "string") return "disconnected";
   const normalized = value.toLowerCase();
@@ -49,12 +82,6 @@ function normalizeConnectionStatus(value: unknown): WhatsAppConnectionStatus {
   if (normalized === "connecting" || normalized === "qr") return "connecting";
   if (normalized === "connected" || normalized === "open") return "connected";
   return "disconnected";
-}
-
-function stripJidSuffix(value: string | null): string | null {
-  if (!value) return null;
-  const at = value.indexOf("@");
-  return at >= 0 ? value.slice(0, at) : value;
 }
 
 export interface HttpUazApiClientConfig {
@@ -252,6 +279,39 @@ export class HttpUazApiClient implements UazApiClient {
       body,
     });
     return extractSendResult(result);
+  }
+
+  async listChats(
+    creds: UazApiInstanceCredentials,
+    params: ListChatsParams,
+  ): Promise<ListChatsResult> {
+    const body: Record<string, unknown> = {
+      limit: params.limit,
+      offset: params.offset,
+    };
+    if (params.sort !== undefined) body.sort = params.sort;
+    if (params.operator !== undefined) body.operator = params.operator;
+    if (params.filters) Object.assign(body, params.filters);
+
+    const result = await this.instanceRequest(creds, "/chat/find", {
+      method: "POST",
+      body,
+    });
+
+    const rawChats = pick(result, "chats");
+    const chats: UazApiChat[] = Array.isArray(rawChats)
+      ? rawChats.filter(isObject).map(toUazApiChat)
+      : [];
+
+    const pagination = pick(result, "pagination");
+    const totalRecords = pickNumber(pagination, "totalRecords") ?? chats.length;
+    const limit = pickNumber(pagination, "limit") ?? params.limit;
+    const offset = pickNumber(pagination, "offset") ?? params.offset;
+
+    return {
+      chats,
+      pagination: { totalRecords, limit, offset },
+    };
   }
 
   async setWebhook(

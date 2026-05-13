@@ -2,6 +2,7 @@
 
 import { Loader2, Search, SlidersHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import { AvatarInitials } from "./avatar-initials";
 import { useConversationStore } from "@/stores/conversation-store";
 import type { Conversation } from "@/types/conversation";
@@ -121,7 +122,7 @@ export function ConversationList({
         {conversations.map((conv) => {
           const isSelected = selectedConversationId === conv.id;
           const contactName =
-            conv.contact.name ?? conv.contact.phone ?? "Sem nome";
+            getContactDisplayName(conv.contact) || "Sem nome";
           const preview = conv.lastMessage?.content ?? null;
 
           return (

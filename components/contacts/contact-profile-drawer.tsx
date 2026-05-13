@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { formatRelativeTime, formatDate } from "@/lib/format";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import {
   Sheet,
   SheetContent,
@@ -77,7 +78,7 @@ function DrawerBody({
   onDelete: () => void;
   onUpdate: (partial: ContactProfileUpdate) => Promise<void>;
 }) {
-  const displayName = item.name ?? "Contato sem nome";
+  const displayName = getContactDisplayName(item);
   const canDelete = item.conversasCount === 0;
   const deleteTooltip = canDelete
     ? undefined

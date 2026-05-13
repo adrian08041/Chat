@@ -26,10 +26,14 @@ export async function GET(request: NextRequest) {
     const cursor = url.searchParams.get("cursor") ?? undefined;
     const limitRaw = url.searchParams.get("limit");
     const limit = limitRaw ? Number.parseInt(limitRaw, 10) : undefined;
+    const savedRaw = url.searchParams.get("saved");
+    const savedFilter =
+      savedRaw === "saved" || savedRaw === "unsaved" ? savedRaw : undefined;
     const page = await listContacts({
       workspaceId: session.user.workspaceId,
       search,
       tagId,
+      savedFilter,
       cursor,
       limit: Number.isFinite(limit) ? limit : undefined,
     });

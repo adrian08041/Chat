@@ -80,7 +80,7 @@ export async function persistInboundMessage(params: {
     return { outcome: "ignored", reason: "chatId ausente" };
   }
 
-  const contact = await upsertContactFromInbound({
+  const { contact } = await upsertContactFromInbound({
     workspaceId: instance.workspaceId,
     phone: normalized.chatId,
     fallbackName: normalized.senderName,

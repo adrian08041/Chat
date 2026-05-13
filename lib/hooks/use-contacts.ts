@@ -12,15 +12,19 @@ import type { ContactListItem, ContactsPage, ContactProfile } from "@/types/cont
 
 export const CONTACTS_QUERY_KEY: QueryKey = ["contacts"];
 
+export type ContactSavedFilter = "saved" | "unsaved";
+
 export type ContactsFilters = {
   search?: string;
   tagId?: string;
+  savedFilter?: ContactSavedFilter;
 };
 
 function buildListUrl(filters: ContactsFilters, cursor?: string): string {
   const qs = new URLSearchParams();
   if (filters.search) qs.set("search", filters.search);
   if (filters.tagId) qs.set("tagId", filters.tagId);
+  if (filters.savedFilter) qs.set("saved", filters.savedFilter);
   if (cursor) qs.set("cursor", cursor);
   const q = qs.toString();
   return q ? `/api/contacts?${q}` : "/api/contacts";

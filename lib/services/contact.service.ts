@@ -123,39 +123,59 @@ export async function upsertContactFromInbound(params: {
   workspaceId: string;
   phone: string;
   fallbackName: string | null;
-}): Promise<Contact> {
+  // avatarUrl sempre sobrescreve quando informado — uazapi é fonte da verdade
+  // da foto de perfil. fallbackName segue regra só-se-vazio (preserva edição manual).
+  avatarUrl?: string | null;
+}): Promise<{ contact: Contact; created: boolean }> {
   const phone = normalizeContactPhone(params.phone);
   if (!phone) throw new Error("upsertContactFromInbound requer phone não-vazio");
 
   const fallbackName = params.fallbackName?.trim() || null;
+  const avatarUrl = params.avatarUrl?.trim() || null;
 
-  const upserted = await prisma.contact.upsert({
+  const existing = await prisma.contact.findUnique({
     where: { workspaceId_phone: { workspaceId: params.workspaceId, phone } },
-    create: {
-      workspaceId: params.workspaceId,
-      phone,
-      name: fallbackName,
-    },
-    update: {},
   });
 
-  if (!upserted.name && fallbackName) {
-    return prisma.contact.update({
-      where: { id: upserted.id },
-      data: { name: fallbackName },
+  if (!existing) {
+    const created = await prisma.contact.create({
+      data: {
+        workspaceId: params.workspaceId,
+        phone,
+        name: fallbackName,
+        avatarUrl,
+      },
     });
+    return { contact: created, created: true };
   }
-  return upserted;
+
+  const updates: Prisma.ContactUpdateInput = {};
+  if (!existing.name && fallbackName) updates.name = fallbackName;
+  if (avatarUrl !== null) updates.avatarUrl = avatarUrl;
+
+  if (Object.keys(updates).length === 0) {
+    return { contact: existing, created: false };
+  }
+  const updated = await prisma.contact.update({
+    where: { id: existing.id },
+    data: updates,
+  });
+  return { contact: updated, created: false };
 }
 
 // ============================================================================
 // List (paginada com cursor)
 // ============================================================================
 
+export type ContactSavedFilter = "saved" | "unsaved";
+
 export type ListContactsInput = {
   workspaceId: string;
   search?: string;
   tagId?: string;
+  // "saved" = tem nome preenchido; "unsaved" = só telefone (importado do uazapi
+  // ou webhook). Sem o filtro = todos.
+  savedFilter?: ContactSavedFilter;
   cursor?: string;
   limit?: number;
 };
@@ -182,6 +202,12 @@ export async function listContacts(
 
   if (input.tagId) {
     where.tags = { some: { tagId: input.tagId } };
+  }
+
+  if (input.savedFilter === "saved") {
+    where.name = { not: null };
+  } else if (input.savedFilter === "unsaved") {
+    where.name = null;
   }
 
   const contacts = await prisma.contact.findMany({

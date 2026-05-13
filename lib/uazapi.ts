@@ -96,6 +96,41 @@ export interface UpdateDelayParams {
   max: number;
 }
 
+// /chat/find — busca paginada de chats da instância.
+// Sort default no nosso uso: "-wa_lastMsgTimestamp" (mais recentes primeiro).
+export interface ListChatsParams {
+  limit: number;
+  offset: number;
+  sort?: string;
+  operator?: "AND" | "OR";
+  // Filtros adicionais aceitos pelo /chat/find (ex.: `wa_isGroup: false`).
+  // Mantido como Record permissivo porque o endpoint aceita muitos campos.
+  filters?: Record<string, unknown>;
+}
+
+// Subset do schema Chat do UazApi (63 campos no total). Mantemos só o que
+// importa pro sync de contatos. Tudo opcional porque a UazApi pode omitir.
+export interface UazApiChat {
+  wa_chatid?: string | null;
+  phone?: string | null;
+  wa_contactName?: string | null;
+  wa_name?: string | null;
+  name?: string | null;
+  image?: string | null;
+  imagePreview?: string | null;
+  wa_isGroup?: boolean | null;
+  wa_lastMsgTimestamp?: number | null;
+}
+
+export interface ListChatsResult {
+  chats: UazApiChat[];
+  pagination: {
+    totalRecords: number;
+    limit: number;
+    offset: number;
+  };
+}
+
 export interface UazApiClient {
   // Admin (precisa UAZAPI_ADMIN_TOKEN)
   createInstance(params: CreateInstanceParams): Promise<CreateInstanceResult>;
@@ -119,6 +154,12 @@ export interface UazApiClient {
     creds: UazApiInstanceCredentials,
     params: SendMediaParams,
   ): Promise<SendResult>;
+
+  // Chats
+  listChats(
+    creds: UazApiInstanceCredentials,
+    params: ListChatsParams,
+  ): Promise<ListChatsResult>;
 
   // Config
   setWebhook(

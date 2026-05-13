@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { AvatarInitials } from "@/components/chat/avatar-initials";
 import { formatDate, formatRelativeTime } from "@/lib/format";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import { ContactInlineField } from "./contact-inline-field";
 import { ContactTagsEditor } from "./contact-tags-editor";
 import { ContactAssigneeSelect } from "./contact-assignee-select";
@@ -32,7 +33,7 @@ interface Props {
 }
 
 export function ContactProfileHeader({ item, onUpdate }: Props) {
-  const displayName = item.name ?? "Contato sem nome";
+  const displayName = getContactDisplayName(item);
 
   return (
     <div className="flex flex-col gap-6">

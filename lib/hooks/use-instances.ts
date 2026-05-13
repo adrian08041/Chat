@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api-client";
 import type { ConnectInstanceResult, WhatsAppInstance } from "@/types/instance";
+import type { SyncJob } from "@/types/instance-sync";
 
 export const INSTANCES_QUERY_KEY: QueryKey = ["instances"];
 
@@ -99,6 +100,68 @@ export function useDeleteInstance() {
         method: "DELETE",
       }),
     onSuccess: invalidate,
+  });
+}
+
+// `enabled` opcional: por padrão a query só é habilitada quando há instanceId,
+// mas o caller pode controlar pra evitar GET no mount inicial em cards onde
+// o usuário ainda não interagiu (n cards = n GETs ociosos no /numeros).
+export function useSyncContactsStatus(
+  instanceId: string | null,
+  options?: { enabled?: boolean },
+) {
+  const enabled = (options?.enabled ?? true) && instanceId !== null;
+  return useQuery({
+    queryKey: ["instances", instanceId, "sync-contacts"],
+    queryFn: () =>
+      apiFetch<{ job: SyncJob | null }>(
+        `/api/instances/${instanceId}/sync-contacts`,
+      ),
+    enabled,
+    // Polling 1.5s enquanto job estiver rodando; senão fica idle.
+    refetchInterval: (query) => {
+      const data = query.state.data as { job: SyncJob | null } | undefined;
+      return data?.job?.status === "running" ? 1500 : false;
+    },
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useStartSyncContacts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      apiFetch<{ job: SyncJob; alreadyRunning: boolean }>(
+        `/api/instances/${instanceId}/sync-contacts`,
+        { method: "POST" },
+      ),
+    onSuccess: (data, instanceId) => {
+      // Atualiza cache do status imediatamente — UI já mostra running sem esperar polling.
+      queryClient.setQueryData(["instances", instanceId, "sync-contacts"], {
+        job: data.job,
+      });
+      // Invalida lista de contatos pra refletir importação assim que terminar
+      // (o polling vai invalidar de novo no done).
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    },
+  });
+}
+
+export function useCancelSyncContacts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      apiFetch<{ cancelled: boolean }>(
+        `/api/instances/${instanceId}/sync-contacts`,
+        { method: "DELETE" },
+      ),
+    onSuccess: (_data, instanceId) => {
+      // Invalida o status pra refletir o cancel rapidamente — o polling pega
+      // a transição running → cancelled no próximo tick também.
+      queryClient.invalidateQueries({
+        queryKey: ["instances", instanceId, "sync-contacts"],
+      });
+    },
   });
 }
 

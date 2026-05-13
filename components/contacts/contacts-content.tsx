@@ -10,8 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ContactProfileDrawer } from "@/components/contacts/contact-profile-drawer";
 import { NewContactSheet } from "@/components/contacts/new-contact-sheet";
 import { formatRelativeTime } from "@/lib/format";
+import { getContactDisplayName } from "@/lib/contacts/format";
 import { useContacts, useDeleteContact, useUpdateContact } from "@/lib/hooks/use-contacts";
-import { useTags } from "@/lib/hooks/use-tags";
 import { ApiClientError } from "@/lib/api-client";
 import type { ContactListItem } from "@/types/contact";
 
@@ -47,7 +47,7 @@ function ContactRow({ item, onOpenProfile, onStartChat, onDelete, isDeleting }: 
           <AvatarInitials name={item.name} size="sm" />
           <div className="min-w-0">
             <p className="text-sm font-medium text-txt-primary truncate">
-              {item.name ?? "Contato sem nome"}
+              {getContactDisplayName(item)}
             </p>
             {item.email && (
               <p className="text-xs text-txt-muted truncate">{item.email}</p>
@@ -125,17 +125,18 @@ function TableRowsSkeleton({ count = 6 }: { count?: number }) {
   );
 }
 
+type SavedTab = "todos" | "saved" | "unsaved";
+
 export function ContactsContent() {
   const router = useRouter();
   const [searchInput, setSearchInput] = useState("");
-  const [activeTagId, setActiveTagId] = useState<string | "todos">("todos");
+  const [savedTab, setSavedTab] = useState<SavedTab>("todos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [createdExtra, setCreatedExtra] = useState<ContactListItem | null>(null);
   const [newContactOpen, setNewContactOpen] = useState(false);
 
   const debouncedSearch = useDebounced(searchInput.trim(), 300);
 
-  const { data: tags = [] } = useTags();
   const {
     data,
     fetchNextPage,
@@ -146,7 +147,7 @@ export function ContactsContent() {
     refetch,
   } = useContacts({
     search: debouncedSearch || undefined,
-    tagId: activeTagId === "todos" ? undefined : activeTagId,
+    savedFilter: savedTab === "todos" ? undefined : savedTab,
   });
 
   const deleteMutation = useDeleteContact();
@@ -217,7 +218,7 @@ export function ContactsContent() {
     setSelectedId(created.id);
   }, []);
 
-  const hasFilter = debouncedSearch.length > 0 || activeTagId !== "todos";
+  const hasFilter = debouncedSearch.length > 0 || savedTab !== "todos";
 
   return (
     <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -265,32 +266,30 @@ export function ContactsContent() {
         />
       </div>
 
-      <div className="flex gap-2 flex-wrap" role="tablist" aria-label="Filtros de contatos">
-        <button
-          role="tab"
-          aria-selected={activeTagId === "todos"}
-          onClick={() => setActiveTagId("todos")}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-            activeTagId === "todos"
-              ? "bg-primary-600 text-txt-on-primary"
-              : "bg-surface-elevated text-txt-secondary hover:bg-surface-card"
-          }`}
-        >
-          Todos
-        </button>
-        {tags.map((tag) => (
+      <div
+        className="flex gap-2 flex-wrap"
+        role="tablist"
+        aria-label="Filtro por status do contato"
+      >
+        {(
+          [
+            { key: "todos", label: "Todos" },
+            { key: "saved", label: "Salvos" },
+            { key: "unsaved", label: "Não salvos" },
+          ] as const
+        ).map((opt) => (
           <button
-            key={tag.id}
+            key={opt.key}
             role="tab"
-            aria-selected={activeTagId === tag.id}
-            onClick={() => setActiveTagId(tag.id)}
+            aria-selected={savedTab === opt.key}
+            onClick={() => setSavedTab(opt.key)}
             className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-              activeTagId === tag.id
+              savedTab === opt.key
                 ? "bg-primary-600 text-txt-on-primary"
                 : "bg-surface-elevated text-txt-secondary hover:bg-surface-card"
             }`}
           >
-            {tag.name}
+            {opt.label}
           </button>
         ))}
       </div>
