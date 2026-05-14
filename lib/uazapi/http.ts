@@ -17,6 +17,7 @@ import {
   type UazApiChat,
   type UazApiClient,
   type UazApiInstanceCredentials,
+  type UazApiNumberCheck,
   UazApiError,
   type UpdateDelayParams,
 } from "../uazapi";
@@ -70,6 +71,17 @@ function toUazApiChat(raw: Record<string, unknown>): UazApiChat {
     imagePreview: pickString(raw, "imagePreview"),
     wa_isGroup: pickBoolean(raw, "wa_isGroup"),
     wa_lastMsgTimestamp: pickNumber(raw, "wa_lastMsgTimestamp"),
+  };
+}
+
+function toNumberCheck(raw: Record<string, unknown>): UazApiNumberCheck {
+  return {
+    query: pickString(raw, "query") ?? "",
+    jid: stripJidSuffix(pickString(raw, "jid", "lid")),
+    isInWhatsapp: pickBoolean(raw, "isInWhatsapp") ?? false,
+    verifiedName: pickString(raw, "verifiedName"),
+    groupName: pickString(raw, "groupName"),
+    error: pickString(raw, "error"),
   };
 }
 
@@ -312,6 +324,21 @@ export class HttpUazApiClient implements UazApiClient {
       chats,
       pagination: { totalRecords, limit, offset },
     };
+  }
+
+  async checkNumbers(
+    creds: UazApiInstanceCredentials,
+    numbers: string[],
+  ): Promise<UazApiNumberCheck[]> {
+    if (numbers.length === 0) return [];
+    const result = await this.instanceRequest(creds, "/chat/check", {
+      method: "POST",
+      body: { numbers },
+    });
+    // UazApi devolve array direto OU envelope { numbers: [...] }; aceitamos ambos.
+    const raw = Array.isArray(result) ? result : pick(result, "numbers", "checks");
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(isObject).map(toNumberCheck);
   }
 
   async setWebhook(

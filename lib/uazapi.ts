@@ -131,6 +131,17 @@ export interface ListChatsResult {
   };
 }
 
+// /chat/check — valida se números existem no WhatsApp.
+// Subset do schema oficial; mantemos só o que aplicamos no UI.
+export interface UazApiNumberCheck {
+  query: string;
+  jid: string | null;
+  isInWhatsapp: boolean;
+  verifiedName: string | null;
+  groupName: string | null;
+  error: string | null;
+}
+
 export interface UazApiClient {
   // Admin (precisa UAZAPI_ADMIN_TOKEN)
   createInstance(params: CreateInstanceParams): Promise<CreateInstanceResult>;
@@ -160,6 +171,12 @@ export interface UazApiClient {
     creds: UazApiInstanceCredentials,
     params: ListChatsParams,
   ): Promise<ListChatsResult>;
+
+  // Validação de números no WhatsApp
+  checkNumbers(
+    creds: UazApiInstanceCredentials,
+    numbers: string[],
+  ): Promise<UazApiNumberCheck[]>;
 
   // Config
   setWebhook(

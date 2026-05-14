@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { X } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import {
   Sheet,
@@ -10,9 +10,22 @@ import {
   SheetTitle,
   SheetFooter,
 } from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useTags } from "@/lib/hooks/use-tags";
 import { useWorkspaceUsers } from "@/lib/hooks/use-users";
-import { useCreateContact } from "@/lib/hooks/use-contacts";
+import {
+  CHECK_PHONE_MIN_DIGITS,
+  type CheckPhoneResult,
+  useCheckWhatsappNumber,
+  useCreateContact,
+} from "@/lib/hooks/use-contacts";
 import { ApiClientError } from "@/lib/api-client";
 import type { ContactListItem } from "@/types/contact";
 
@@ -20,6 +33,59 @@ const NO_RESPONSAVEL = "__none__";
 
 function isValidEmail(email: string): boolean {
   return /\S+@\S+\.\S+/.test(email);
+}
+
+// Permite só dígitos e formatação comum (+, -, (, ), espaço). Letras e
+// símbolos quaisquer são removidos silenciosamente — comportamento de
+// telefone de aplicativos mobile, não exige feedback explícito.
+function sanitizePhoneInput(value: string): string {
+  return value.replace(/[^\d+\-()\s]/g, "");
+}
+
+interface PhoneCheckHintProps {
+  data: CheckPhoneResult | undefined;
+}
+
+// Render do feedback de validação. Verde = no WhatsApp, amarelo = não está,
+// cinza = sem instance CONNECTED ou erro UazApi (skip silencioso). Não bloqueia.
+function PhoneCheckHint({ data }: PhoneCheckHintProps) {
+  if (!data) return null;
+
+  if (!data.validated) {
+    if (data.skipReason === "no_instance") {
+      return (
+        <p className="text-xs text-txt-muted">
+          Nenhum WhatsApp conectado para fazer a verificação. Você pode salvar mesmo assim.
+        </p>
+      );
+    }
+    // api_error (ou null por defesa) — falha transitória da UazApi
+    return (
+      <p className="text-xs text-txt-muted">
+        Verificação indisponível agora. Tente de novo em instantes ou salve mesmo assim.
+      </p>
+    );
+  }
+
+  if (data.isInWhatsapp) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-success">
+        <CheckCircle2 className="w-3.5 h-3.5" />
+        Este número tem WhatsApp
+        {data.verifiedName ? ` · ${data.verifiedName}` : ""}
+      </p>
+    );
+  }
+
+  return (
+    <p className="flex items-start gap-1.5 text-xs text-warning">
+      <AlertCircle className="w-3.5 h-3.5 mt-px shrink-0" />
+      <span>
+        Este número não tem conta no WhatsApp. Confira se digitou certo — se
+        salvar assim, não vai dar para conversar com ele pelo app.
+      </span>
+    </p>
+  );
 }
 
 interface NewContactFormProps {
@@ -35,19 +101,46 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [agentId, setAgentId] = useState<string>(NO_RESPONSAVEL);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [phoneTouched, setPhoneTouched] = useState(false);
 
   const { data: tags = [] } = useTags();
   const { data: users = [] } = useWorkspaceUsers();
   const createMutation = useCreateContact();
+  const checkMutation = useCheckWhatsappNumber();
 
   const trimmedName = name.trim();
   const trimmedPhone = phone.trim();
   const trimmedEmail = email.trim();
+  const phoneDigits = trimmedPhone.replace(/\D/g, "");
+
+  // Dígitos do telefone que foi efetivamente validado (variables guarda o
+  // input bruto da última mutation). Comparar com phoneDigits diz se o
+  // resultado em cache ainda é "fresh" pro valor atual.
+  const checkedDigits = checkMutation.variables?.replace(/\D/g, "") ?? null;
+  const checkInSync = checkedDigits !== null && checkedDigits === phoneDigits;
+  const verifiedName =
+    checkMutation.data?.validated && checkInSync
+      ? checkMutation.data.verifiedName
+      : null;
+
+  const canCheck =
+    phoneDigits.length >= CHECK_PHONE_MIN_DIGITS && !checkMutation.isPending;
 
   const emailError = trimmedEmail && !isValidEmail(trimmedEmail) ? "Email inválido" : null;
+  // Erro do server (409 phone_exists) tem precedência sobre validação local.
+  // Validação local só aparece depois que o usuário interagiu com o campo
+  // (touched) — evita "vermelho na primeira tecla" enquanto digita.
+  const phoneTooShort =
+    phoneDigits.length > 0 && phoneDigits.length < CHECK_PHONE_MIN_DIGITS;
+  const phoneTooShortError =
+    phoneTouched && phoneTooShort
+      ? `Telefone deve ter ao menos ${CHECK_PHONE_MIN_DIGITS} dígitos`
+      : null;
+  const phoneInputError = phoneError ?? phoneTooShortError;
+
   const canSubmit =
     trimmedName.length > 0 &&
-    trimmedPhone.length > 0 &&
+    phoneDigits.length >= CHECK_PHONE_MIN_DIGITS &&
     !emailError &&
     !createMutation.isPending;
 
@@ -55,6 +148,19 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
     setSelectedTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
+  }
+
+  function handleCheck() {
+    if (!canCheck) return;
+    checkMutation.mutate(trimmedPhone, {
+      onError: (err) => {
+        const msg =
+          err instanceof ApiClientError
+            ? err.message
+            : "Não foi possível verificar o número agora.";
+        toast.error(msg);
+      },
+    });
   }
 
   async function handleSubmit() {
@@ -90,6 +196,9 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
     );
   }
 
+  const showHint = checkMutation.data !== undefined && checkInSync;
+  const checkLabel = showHint ? "Verificar de novo" : "Verificar número";
+
   return (
     <>
       <SheetHeader className="border-b border-border-default pb-4">
@@ -115,7 +224,7 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
           <input
             id="new-contact-name"
             type="text"
-            placeholder="Ex: Ana Silva"
+            placeholder={verifiedName ?? "Ex: Ana Silva"}
             value={name}
             onChange={(e) => setName(e.target.value)}
             className="h-10 px-3 rounded-lg bg-surface-elevated border border-border-default text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all"
@@ -132,17 +241,57 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
             placeholder="+55 00 0 0000-0000"
             value={phone}
             onChange={(e) => {
-              setPhone(e.target.value);
+              const next = sanitizePhoneInput(e.target.value);
+              setPhone(next);
               if (phoneError) setPhoneError(null);
+              // Reset do último resultado quando os dígitos mudam — força o
+              // user a revalidar pro número novo em vez de ver resultado stale.
+              const nextDigits = next.replace(/\D/g, "");
+              if (
+                checkedDigits !== null &&
+                checkedDigits !== nextDigits &&
+                (checkMutation.data !== undefined || checkMutation.error !== null)
+              ) {
+                checkMutation.reset();
+              }
             }}
-            aria-invalid={phoneError !== null}
+            onBlur={() => setPhoneTouched(true)}
+            aria-invalid={phoneInputError !== null}
             className={`h-10 px-3 rounded-lg bg-surface-elevated border text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 transition-all ${
-              phoneError
+              phoneInputError
                 ? "border-danger focus:ring-danger-light"
                 : "border-border-default focus:ring-primary-400"
             }`}
           />
-          {phoneError && <p className="text-xs text-danger">{phoneError}</p>}
+          {phoneInputError && <p className="text-xs text-danger">{phoneInputError}</p>}
+          {phoneDigits.length >= CHECK_PHONE_MIN_DIGITS && (
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                {showHint ? (
+                  <PhoneCheckHint data={checkMutation.data} />
+                ) : (
+                  <p className="text-xs text-txt-muted">
+                    Confira se este número usa WhatsApp.
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCheck}
+                disabled={!canCheck}
+                className="shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs font-medium text-primary-600 hover:bg-primary-light disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {checkMutation.isPending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Verificando…
+                  </>
+                ) : (
+                  checkLabel
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">
@@ -222,19 +371,37 @@ function NewContactForm({ onClose, onCreated }: NewContactFormProps) {
           <label htmlFor="new-contact-agent" className="text-xs font-medium text-txt-secondary">
             Responsável <span className="text-txt-muted font-normal">(opcional)</span>
           </label>
-          <select
-            id="new-contact-agent"
+          <Select
             value={agentId}
-            onChange={(e) => setAgentId(e.target.value)}
-            className="h-10 px-3 rounded-lg bg-surface-elevated border border-border-default text-sm text-txt-primary focus:outline-none focus:ring-2 focus:ring-primary-400 transition-all"
+            onValueChange={(v) => setAgentId(v ?? NO_RESPONSAVEL)}
           >
-            <option value={NO_RESPONSAVEL}>Sem responsável</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger
+              id="new-contact-agent"
+              className="!h-10 w-full px-3 rounded-lg bg-surface-elevated border-border-default text-sm text-txt-primary focus-visible:ring-primary-400/50 focus-visible:border-primary-400"
+            >
+              <SelectValue>
+                {(value) => {
+                  if (value === NO_RESPONSAVEL || value == null) {
+                    return "Sem responsável";
+                  }
+                  return users.find((u) => u.id === value)?.name ?? "Sem responsável";
+                }}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent
+              align="start"
+              alignItemWithTrigger={false}
+              className="bg-surface-card text-txt-primary"
+            >
+              <SelectItem value={NO_RESPONSAVEL}>Sem responsável</SelectItem>
+              {users.length > 0 && <SelectSeparator />}
+              {users.map((u) => (
+                <SelectItem key={u.id} value={u.id}>
+                  {u.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
