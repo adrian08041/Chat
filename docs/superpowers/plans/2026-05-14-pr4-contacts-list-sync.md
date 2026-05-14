@@ -399,7 +399,7 @@ export async function startSyncContacts(params: {
 
 - [ ] **Step 4: Substituir `runJob` pelo orquestrador de duas fases**
 
-Substituir a função `runJob` inteira (linhas ~129-219 no estado original) por:
+Substituir a função `runJob` inteira (linhas ~129-219 no estado original) por o código abaixo. **Nota:** a versão antiga tinha `job.finishedAt = Date.now()` em três lugares (sucesso, erro e antes do TTL). A nova centraliza no `finally` — comportamento idêntico, código mais curto.
 
 ```ts
 async function runJob(
@@ -714,38 +714,15 @@ export async function DELETE(_request: NextRequest, ctx: RouteContext) {
 }
 ```
 
-**Nota sobre `handleRouteError`:** se a função não lida com `ZodError` por padrão (devolve 500 em vez de 400), precisa adicionar tratamento explícito. Antes de codar, ler `lib/api-utils.ts` pra confirmar. Se não tratar: envolver o `JSON.parse(raw)` num try próprio e devolver 400 com `new ApiError("contactScope inválido", 400)`. Senão deixar como está — handler do projeto faz o resto.
+**Nota sobre `handleRouteError`:** já confirmado — `lib/api-utils.ts:49-50` mapeia `ZodError` para HTTP **422** ("Dados inválidos"). Essa é a convenção do projeto pra erros de validação (não 400). Deixar o catch como está; nenhuma modificação extra necessária.
 
-- [ ] **Step 2: Confirmar que `handleRouteError` cobre ZodError**
-
-Run: ler `lib/api-utils.ts` (busca `ZodError` ou `instanceof z`).
-
-Se já tratar → seguir.
-Se não tratar → modificar o POST pra capturar `z.ZodError` explicitamente:
-
-```ts
-} catch (error) {
-  if (error instanceof z.ZodError) {
-    return handleRouteError(
-      new (await import("@/lib/api-utils")).ApiError(
-        "contactScope inválido",
-        400,
-      ),
-    );
-  }
-  return handleRouteError(error);
-}
-```
-
-(Implementador: pode importar `ApiError` no topo em vez do dynamic import.)
-
-- [ ] **Step 3: Verificar estática**
+- [ ] **Step 2: Verificar estática**
 
 Run: `npx tsc --noEmit && npm run lint`
 
 Expected: PASS limpo.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
 
 ```bash
 git add app/api/instances/[id]/sync-contacts/route.ts
@@ -896,19 +873,21 @@ Substituir o `useEffect` (linhas ~159-188) por:
       if (job?.status === "done") {
         queryClient.invalidateQueries({ queryKey: ["contacts"] });
 
-        // Monta a string de contagem agregada por fase.
-        const parts: string[] = [];
+        // Template alinhado com spec §9.3:
+        //   "Importação concluída: X conversas + Y da agenda · Z atualizados"
+        // Cada parte com 0 é omitida.
+        const novosParts: string[] = [];
         if (job.chatsImported > 0) {
-          parts.push(`${job.chatsImported} de conversas`);
+          novosParts.push(`${job.chatsImported} conversas`);
         }
         if (job.addressBookImported > 0) {
-          parts.push(`${job.addressBookImported} da agenda`);
+          novosParts.push(`${job.addressBookImported} da agenda`);
         }
-        const novos = parts.length > 0 ? parts.join(" + ") : "0";
+        const novos = novosParts.length > 0 ? novosParts.join(" + ") : "0";
         const total = job.imported + job.updated;
-        const summary = `Importação concluída: ${novos} novos · ${job.updated} atualizados${
-          job.skipped > 0 ? ` · ${job.skipped} pulados` : ""
-        }`;
+        const summary = `Importação concluída: ${novos}${
+          job.updated > 0 ? ` · ${job.updated} atualizados` : ""
+        }${job.skipped > 0 ? ` · ${job.skipped} pulados` : ""}`;
 
         if (job.warning) {
           toast.success(summary, { description: job.warning });
@@ -1068,7 +1047,7 @@ Opção A — desconectar instância UazApi entre fase 1 e fase 2 (difícil de c
 Opção B — em dev, editar temporariamente `lib/uazapi/http.ts` no método `listContacts` pra `throw new UazApiError("teste", 500)` antes do request. Disparar sync, conferir:
 - Status final = `done`.
 - Toast = **success** com a contagem da fase 1 + `description` com o aviso.
-- Reverter o throw.
+- **Reverter o throw** e confirmar com `git diff lib/uazapi/http.ts` antes de qualquer commit/push.
 
 - [ ] **Step 6: Cancelar durante fase 2**
 
@@ -1080,7 +1059,7 @@ Opção B — em dev, editar temporariamente `lib/uazapi/http.ts` no método `li
 
 Run: `curl -X POST http://localhost:3000/api/instances/<id>/sync-contacts -H "Content-Type: application/json" -H "Cookie: <session>" -d '{"contactScope":"lixo"}'`
 
-Expected: 400 com mensagem informativa. (Se vier 500, voltar pro tratamento de ZodError na Task 5 Step 2.)
+Expected: **422** "Dados inválidos" com `details` apontando o campo (convenção do projeto pra ZodError via `handleRouteError`). Se vier 500, há regressão — investigar.
 
 - [ ] **Step 8: POST concorrente com scope diferente**
 
