@@ -1032,7 +1032,7 @@ Expected: PASS limpo.
 5. Observar a barra de progress:
    - Texto começa em **"Importando conversas..."**.
    - Em algum momento muda pra **"Importando agenda..."** (quando entra fase 2).
-6. Ao fim, conferir toast: **"Importação concluída: X de conversas + Y da agenda novos · Z atualizados"** (omite parte com 0).
+6. Ao fim, conferir toast: **"Importação concluída: X conversas + Y da agenda · Z atualizados"** (omite parte com 0).
 7. Conferir `/contatos` — devem aparecer contatos novos da fase 2 (mesmo sem avatar).
 
 - [ ] **Step 4: Disparar sync com toggle "Todos"**
@@ -1055,7 +1055,7 @@ Opção B — em dev, editar temporariamente `lib/uazapi/http.ts` no método `li
 2. Quando o texto mudar pra "Importando agenda...", clicar **"Cancelar importação"**.
 3. Conferir toast info com contagens parciais. Status final = `cancelled`.
 
-- [ ] **Step 7: Validação 400 na API**
+- [ ] **Step 7: Validação 422 na API**
 
 Run: `curl -X POST http://localhost:3000/api/instances/<id>/sync-contacts -H "Content-Type: application/json" -H "Cookie: <session>" -d '{"contactScope":"lixo"}'`
 
@@ -1077,7 +1077,7 @@ Se todos os steps acima passaram → o PR está pronto pra commit/merge.
 
 | Risco | Mitigação |
 |---|---|
-| `handleRouteError` não trata `ZodError` → 400 vira 500 | Task 5 Step 2 confirma e ajusta se preciso |
+| Convenção do projeto pra ZodError (422) difere do que o spec sugeriu (400) | Plano usa 422 (verificado em `lib/api-utils.ts:49-50`); spec §10 a alinhar em follow-up |
 | Mock/test do UazApi não cobre `listContacts` | Não há testes; verificação manual cobre |
 | `ConfirmDialog` não aceita `ReactNode` no description | Confirmar antes de fechar Task 7. Se aceitar só string, refatorar pra passar children ou variant nova |
 | Casing real de `contact_FirstName` diverge do schema documentado | Mapper em Task 2 já aceita 3 variações; logar uma página em dev pra confirmar |

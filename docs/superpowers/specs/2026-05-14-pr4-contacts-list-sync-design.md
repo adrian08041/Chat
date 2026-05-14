@@ -255,8 +255,9 @@ Ambas como constantes no topo do arquivo, simétricas.
 `app/api/instances/[id]/sync-contacts/route.ts`:
 
 - **`POST`** aceita body opcional `{ contactScope?: "address_book" | "all" }`,
-  validado com zod. Default `"address_book"`. Valor inválido → 400. Passa pro
-  `startSyncContacts`.
+  validado com zod. Default `"address_book"`. Valor inválido → **422 "Dados
+  inválidos"** com `details` (convenção do projeto via `handleRouteError`,
+  `lib/api-utils.ts:49-50`). Passa pro `startSyncContacts`.
 - **`GET`** e **`DELETE`** inalterados.
 
 Embora `ContactScope` no service permita `"outside_address_book"`, a API só
@@ -330,7 +331,7 @@ Transições terminais (detectadas pelo `useEffect` com `prevStatusRef`):
    `pagination.totalRecords`, `job.total` aumenta. Barra recua proporcionalmente.
    Trade-off aceito; alternativa (pre-fetch da fase 2 só pra calcular total)
    não vale.
-7. **`contactScope` inválido na API:** zod rejeita com 400 antes do service.
+7. **`contactScope` inválido na API:** zod rejeita com 422 antes do service.
 8. **Job em terminal state ainda no TTL:** novo POST inicia novo job
    (substitui no Map). Comportamento atual preservado.
 
@@ -352,7 +353,7 @@ A verificação é manual + estática:
 - Forçar 500 no `/contacts/list` (parar a instância UazApi entre fases ou
   ajustar URL em dev) → conferir warning no toast final + status `done`.
 - Cancelar durante fase 2 → conferir contagens parciais e status `cancelled`.
-- POST com body `{ contactScope: "lixo" }` via curl → conferir 400.
+- POST com body `{ contactScope: "lixo" }` via curl → conferir 422 com `details`.
 - POST duplicado com scope diferente durante job em curso → conferir
   `alreadyRunning: true` e scope original mantido.
 
