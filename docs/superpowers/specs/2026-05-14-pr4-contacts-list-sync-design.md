@@ -334,39 +334,16 @@ Transições terminais (detectadas pelo `useEffect` com `prevStatusRef`):
 8. **Job em terminal state ainda no TTL:** novo POST inicia novo job
    (substitui no Map). Comportamento atual preservado.
 
-## 11. Testes
+## 11. Verificação (antes de marcar como done)
 
-### 11.1 Service (`lib/services/instance-sync.service.test.ts`)
+O projeto **não tem framework de testes** configurado (padrão dos PRs #1-#5).
+A verificação é manual + estática:
 
-- `runAddressBookPhase` happy path: 2 páginas, contatos válidos →
-  `addressBookImported` correto.
-- Phone vazio (jid não normalizável) → `skipped++`.
-- Grupo (`@g.us`) → `skipped++`.
-- Fase 2 falha após fase 1 OK → status `done`, `warning` preenchido,
-  contagens da fase 1 intactas.
-- Cancel durante fase 2 → status `cancelled`, contagens parciais agregadas.
-- `contactScope` propaga corretamente para `client.listContacts`.
-- POST concorrente com scope diferente → `alreadyRunning: true`, scope original
-  mantido.
+**Estática (obrigatório, bloqueia commit):**
+- `npx tsc --noEmit` limpo
+- `npm run lint` limpo
 
-### 11.2 API (`app/api/instances/[id]/sync-contacts/route.test.ts`)
-
-- Body sem `contactScope` → default `"address_book"`.
-- Body com `contactScope: "all"` → propaga ao service.
-- Body com valor inválido → 400.
-
-### 11.3 Client HTTP (`lib/uazapi/http.test.ts`)
-
-- `listContacts` monta body correto.
-- Erro UazApi vira `UazApiError`.
-
-### 11.4 UI
-
-Não há TDD denso; cobertura mínima:
-- Smoke test do ConfirmDialog renderizando o toggle.
-- Smoke test do texto trocando conforme `job.phase`.
-
-## 12. Verificação manual (antes de marcar como done)
+**Manual (smoke + casos críticos):**
 
 - Disparar sync em instância com agenda real, conferir as duas fases no
   progress bar.
