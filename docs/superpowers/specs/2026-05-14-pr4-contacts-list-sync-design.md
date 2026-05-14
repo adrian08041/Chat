@@ -346,14 +346,17 @@ A verificação é manual + estática:
 **Manual (smoke + casos críticos):**
 
 - Disparar sync em instância com agenda real, conferir as duas fases no
-  progress bar.
+  progress bar (texto muda entre "conversas" e "agenda").
 - Disparar com toggle `Todos` → conferir que contatos sem `contact_name`
-  aparecem (com placeholder de telefone).
-- Forçar 500 no `/contacts/list` → conferir warning no toast final.
+  aparecem com placeholder de telefone.
+- Forçar 500 no `/contacts/list` (parar a instância UazApi entre fases ou
+  ajustar URL em dev) → conferir warning no toast final + status `done`.
 - Cancelar durante fase 2 → conferir contagens parciais e status `cancelled`.
-- `tsc --noEmit` + `npm run lint` limpos.
+- POST com body `{ contactScope: "lixo" }` via curl → conferir 400.
+- POST duplicado com scope diferente durante job em curso → conferir
+  `alreadyRunning: true` e scope original mantido.
 
-## 13. Riscos e mitigações
+## 12. Riscos e mitigações
 
 | Risco | Mitigação |
 |---|---|
