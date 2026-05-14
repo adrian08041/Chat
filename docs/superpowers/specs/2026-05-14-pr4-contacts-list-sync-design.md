@@ -70,6 +70,10 @@ export interface UazApiAddressBookContact {
   contact_name: string | null;
   contact_FirstName: string | null;
 }
+// Nota: os nomes dos campos refletem o schema documentado da UazApi
+// (`contact_name`, `contact_FirstName`). Durante a implementação, validar
+// com response real (logar uma página em dev) — se houver divergência de
+// casing/nome, mapear no HTTP client em vez de propagar pro contrato.
 
 export interface ListContactsResult {
   contacts: UazApiAddressBookContact[];
@@ -222,8 +226,10 @@ Para cada contato:
 5. Se `created` → `addressBookImported++`. Senão `addressBookUpdated++`.
    Recomputa `imported`/`updated`.
 6. Quando `pagination.totalRecords > 0` na primeira página, atualiza
-   `job.total = chatsTotalKnown + result.pagination.totalRecords` (somando o
-   total final da fase 1).
+   `job.total = chatsTotalSnapshot + result.pagination.totalRecords` (somando
+   o total final da fase 1). O snapshot é tirado uma vez ao entrar em
+   `runAddressBookPhase` (`const chatsTotalSnapshot = job.total`) antes do
+   primeiro write em `job.total`.
 7. Cancel-checks idênticos à fase 1.
 8. Critério de parada idêntico: `result.contacts.length < PAGE_SIZE` ou
    `fetched >= totalRecords`.
@@ -238,9 +244,11 @@ Para cada contato:
 
 ### 6.4 Page size
 
-- Fase 1: continua `PAGE_SIZE = 200` (atual).
-- Fase 2: `500` (endpoint aceita até 1000; 500 equilibra latência por chamada e
-  número de chamadas).
+- Fase 1: continua `PAGE_SIZE_CHATS = 200` (renomear o `PAGE_SIZE` atual).
+- Fase 2: `PAGE_SIZE_CONTACTS = 500` (endpoint aceita até 1000; 500 equilibra
+  latência por chamada e número de chamadas).
+
+Ambas como constantes no topo do arquivo, simétricas.
 
 ## 7. API
 
@@ -300,8 +308,8 @@ Transições terminais (detectadas pelo `useEffect` com `prevStatusRef`):
   `"Importação concluída: X conversas + Y da agenda · Z atualizados"`
   — se `addressBookImported === 0`, omite "+ Y da agenda".
 
-- **`done` + `warning != null`:** `toast.success` com a contagem +
-  `description: warning` (campo do sonner).
+- **`done` + `warning != null`:** mesma string de contagem do caso sem warning
+  como título do `toast.success`, e `description: warning` (campo do sonner).
 
 - **`cancelled`:** preserva comportamento atual, usando contagens agregadas.
 
