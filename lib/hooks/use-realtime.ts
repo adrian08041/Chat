@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { CONVERSATIONS_QUERY_KEY } from "./use-conversations";
 import { INSTANCES_QUERY_KEY } from "./use-instances";
+import { NOTIFICATIONS_QUERY_KEY } from "./use-notifications";
 
 type ConversationVisibility = {
   assignedUserId: string | null;
@@ -36,7 +37,8 @@ type RealtimeEventPayload =
       conversationId: string;
       visibility: ConversationVisibility;
     }
-  | { type: "instance:updated"; instanceId: string };
+  | { type: "instance:updated"; instanceId: string }
+  | { type: "notification:created" };
 
 export function useRealtime(enabled: boolean = true) {
   const queryClient = useQueryClient();
@@ -82,6 +84,11 @@ export function useRealtime(enabled: boolean = true) {
         case "instance:updated":
           queryClient.invalidateQueries({ queryKey: INSTANCES_QUERY_KEY });
           break;
+        case "notification:created":
+          queryClient.invalidateQueries({
+            queryKey: NOTIFICATIONS_QUERY_KEY,
+          });
+          break;
       }
     };
 
@@ -90,6 +97,7 @@ export function useRealtime(enabled: boolean = true) {
     source.addEventListener("message:updated", typedHandler);
     source.addEventListener("conversation:updated", typedHandler);
     source.addEventListener("instance:updated", typedHandler);
+    source.addEventListener("notification:created", typedHandler);
 
     source.onerror = () => {
       // Se o EventSource não conseguiu reconectar (401 por sessão expirada,

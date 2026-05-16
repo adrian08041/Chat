@@ -12,6 +12,7 @@ import {
   persistInboundMessage,
   updateMessageStatusByReference,
 } from "@/lib/services/message.service";
+import { notifyNumberDisconnected } from "@/lib/services/notification.service";
 import { normalizeEvent } from "@/lib/whatsapp/normalize";
 import type {
   NormalizedConnectionUpdate,
@@ -58,6 +59,7 @@ async function handleConnection(
   }
 
   const status = mapConnectionStatus(update.status);
+  const wasConnected = instance.status === "CONNECTED";
   await prisma.instance.update({
     where: { id: instance.id },
     data: {
@@ -72,6 +74,12 @@ async function handleConnection(
     type: "instance:updated",
     instanceId: instance.id,
   });
+  if (wasConnected && status === "DISCONNECTED") {
+    void notifyNumberDisconnected({
+      workspaceId: instance.workspaceId,
+      instanceName: instance.name,
+    });
+  }
   return undefined;
 }
 

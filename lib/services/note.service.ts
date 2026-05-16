@@ -124,6 +124,10 @@ export async function createConversationNote(
     visibility: { assignedUserId },
   });
 
+  // TODO PR #7b: detectar @menções estruturadas em `content` e disparar
+  // notifyMention(...) pros usuários mencionados. Detecção e UI de menção
+  // ficam no PR #7b — gancho deixado aqui de propósito.
+
   return toNoteDTO(note);
 }
 

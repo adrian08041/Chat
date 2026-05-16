@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Bell,
@@ -15,7 +15,11 @@ import {
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { formatRelativeTime } from "@/lib/format";
-import { MOCK_NOTIFICATIONS } from "@/lib/mock-data";
+import {
+  useNotifications,
+  useMarkNotificationRead,
+  useMarkAllNotificationsRead,
+} from "@/lib/hooks/use-notifications";
 import type { Notification, NotificationType } from "@/types/notification";
 
 interface TypeStyle {
@@ -106,31 +110,31 @@ function NotificationItem({ notification, onSelect }: NotificationItemProps) {
 export function NotificationsMenu() {
   const router = useRouter();
   const [open, setOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>(MOCK_NOTIFICATIONS);
+  const { data, isLoading } = useNotifications();
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
 
-  const unreadCount = useMemo(
-    () => notifications.filter((n) => !n.read).length,
-    [notifications]
-  );
+  const notifications = data?.notifications ?? [];
+  const unreadCount = data?.unreadCount ?? 0;
 
   const badgeLabel = unreadCount > 9 ? "9+" : String(unreadCount);
 
   const handleSelect = useCallback(
     (notification: Notification) => {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notification.id ? { ...n, read: true } : n))
-      );
+      if (!notification.read) {
+        markRead.mutate(notification.id);
+      }
       setOpen(false);
       if (notification.actionUrl) {
         router.push(notification.actionUrl);
       }
     },
-    [router]
+    [router, markRead]
   );
 
   const handleMarkAllAsRead = useCallback(() => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-  }, []);
+    markAllRead.mutate();
+  }, [markAllRead]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -182,7 +186,11 @@ export function NotificationsMenu() {
         </div>
 
         <div className="max-h-[420px] overflow-y-auto p-2">
-          {notifications.length === 0 ? (
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <span className="text-sm text-txt-muted">Carregando…</span>
+            </div>
+          ) : notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center gap-2">
               <div className="w-12 h-12 rounded-xl bg-surface-elevated flex items-center justify-center">
                 <BellOff className="w-5 h-5 text-txt-muted" />

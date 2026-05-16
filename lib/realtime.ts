@@ -37,7 +37,10 @@ export type RealtimeEvent =
       conversationId: string;
       visibility: ConversationVisibility;
     }
-  | { type: "instance:updated"; instanceId: string };
+  | { type: "instance:updated"; instanceId: string }
+  // Ping workspace-wide: cliente refetcha /api/notifications (filtrado por
+  // recipientUserId no servidor). Sem payload intencional.
+  | { type: "notification:created" };
 
 export type SubscriberIdentity = {
   userId: string;

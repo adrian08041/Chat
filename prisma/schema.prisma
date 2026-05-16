@@ -92,6 +92,14 @@ enum ConversationEventType {
   MESSAGE_SENT
 }
 
+enum NotificationType {
+  CONVERSATION_ASSIGNED
+  NEW_CONTACT
+  TEAM_INVITE_ACCEPTED
+  MENTION
+  NUMBER_DISCONNECTED
+}
+
 // ============================================================================
 // Workspace — tenant raiz. MVP tem 1 workspace; schema já suporta multi.
 // ============================================================================
@@ -111,6 +119,7 @@ model Workspace {
   conversations Conversation[]
   tags          Tag[]
   quickReplies  QuickReply[]
+  notifications Notification[]
 
   @@index([deletedAt])
 }
@@ -141,6 +150,7 @@ model User {
   sentMessages          Message[]           @relation("MessageSentBy")
   conversationEvents    ConversationEvent[] @relation("ConversationEventActor")
   conversationNotes     ConversationNote[]
+  notifications         Notification[]
 
   @@index([workspaceId, email])
   @@index([workspaceId, role])
@@ -433,4 +443,28 @@ model ConversationNote {
   user         User         @relation(fields: [userId], references: [id])
 
   @@index([conversationId, createdAt])
+}
+
+// ============================================================================
+// Notification — notificação in-app para um usuário do workspace (PR #7a).
+// Lida via SSE; `read` marcado pelo recipiente. `actorName` snapshot do nome
+// do autor no momento do evento (sem FK — ator pode ser sistema).
+// ============================================================================
+
+model Notification {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  recipientUserId String
+  type            NotificationType
+  title           String
+  description     String?          @db.Text
+  actionUrl       String?
+  actorName       String?
+  read            Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  recipient User      @relation(fields: [recipientUserId], references: [id])
+
+  @@index([recipientUserId, read, createdAt])
 }

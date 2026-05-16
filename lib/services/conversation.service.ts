@@ -21,6 +21,7 @@ import { Prisma } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { publish } from "@/lib/realtime";
+import { notifyConversationAssigned } from "@/lib/services/notification.service";
 import { toPublicInstance, type InstancePublic } from "./instance.service";
 import type { TagDTO } from "./tag.service";
 
@@ -497,6 +498,15 @@ export async function assignConversation(
       previousAssignedUserId,
     },
   });
+
+  if (input.newAssigneeId) {
+    void notifyConversationAssigned({
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+      newAssigneeId: input.newAssigneeId,
+      actorId: input.actorId,
+    });
+  }
 
   return getConversationById({
     workspaceId: input.workspaceId,
