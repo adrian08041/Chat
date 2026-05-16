@@ -142,6 +142,35 @@ export interface UazApiNumberCheck {
   error: string | null;
 }
 
+// /contacts/list — agenda do aparelho paginada.
+// Diferente de /chat/find: traz contatos sem conversa (lead salvo no celular).
+export type ContactScope = "address_book" | "outside_address_book" | "all";
+
+export interface ListContactsParams {
+  limit: number;   // <= 1000
+  offset: number;
+  contactScope: ContactScope;
+}
+
+// Os nomes dos campos refletem o schema documentado da UazApi
+// (`contact_name`, `contact_FirstName`). Se houver divergência de casing/nome
+// no response real, mapear no HTTP client em vez de propagar pro contrato.
+export interface UazApiAddressBookContact {
+  jid: string;
+  contact_name: string | null;
+  contact_FirstName: string | null;
+}
+
+export interface ListContactsResult {
+  contacts: UazApiAddressBookContact[];
+  pagination: {
+    totalRecords: number;
+    limit: number;
+    offset: number;
+  };
+  totalDeviceContacts: number;
+}
+
 export interface UazApiClient {
   // Admin (precisa UAZAPI_ADMIN_TOKEN)
   createInstance(params: CreateInstanceParams): Promise<CreateInstanceResult>;
@@ -171,6 +200,12 @@ export interface UazApiClient {
     creds: UazApiInstanceCredentials,
     params: ListChatsParams,
   ): Promise<ListChatsResult>;
+
+  // Agenda do aparelho (complementar a listChats — traz contatos sem conversa)
+  listContacts(
+    creds: UazApiInstanceCredentials,
+    params: ListContactsParams,
+  ): Promise<ListContactsResult>;
 
   // Validação de números no WhatsApp
   checkNumbers(

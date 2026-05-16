@@ -26,6 +26,7 @@ import {
   useInstances,
   useStartSyncContacts,
   useSyncContactsStatus,
+  type ContactScope,
 } from "@/lib/hooks/use-instances";
 import type { InstanceStatus, WhatsAppInstance } from "@/types/instance";
 
@@ -151,6 +152,7 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
   const startMutation = useStartSyncContacts();
   const cancelMutation = useCancelSyncContacts();
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [scope, setScope] = useState<ContactScope>("address_book");
   const job = data?.job ?? null;
   const isRunning = job?.status === "running";
 
@@ -161,11 +163,30 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
     if (prev === "running") {
       if (job?.status === "done") {
         queryClient.invalidateQueries({ queryKey: ["contacts"] });
-        toast.success(
-          `Importação concluída: ${job.imported} novos, ${job.updated} atualizados${
-            job.skipped > 0 ? `, ${job.skipped} pulados` : ""
-          }`,
-        );
+
+        // Template alinhado com spec §9.3:
+        //   "Importação concluída: X conversas + Y da agenda · Z atualizados"
+        // Cada parte com 0 é omitida.
+        const novosParts: string[] = [];
+        if (job.chatsImported > 0) {
+          novosParts.push(`${job.chatsImported} conversas`);
+        }
+        if (job.addressBookImported > 0) {
+          novosParts.push(`${job.addressBookImported} da agenda`);
+        }
+        const novos = novosParts.length > 0 ? novosParts.join(" + ") : "0";
+        const total = job.imported + job.updated;
+        const summary = `Importação concluída: ${novos}${
+          job.updated > 0 ? ` · ${job.updated} atualizados` : ""
+        }${job.skipped > 0 ? ` · ${job.skipped} pulados` : ""}`;
+
+        if (job.warning) {
+          toast.success(summary, { description: job.warning });
+        } else if (total === 0 && job.skipped === 0) {
+          toast.info("Nada novo para importar");
+        } else {
+          toast.success(summary);
+        }
       } else if (job?.status === "cancelled") {
         queryClient.invalidateQueries({ queryKey: ["contacts"] });
         toast.info(
@@ -183,6 +204,9 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
     job?.imported,
     job?.updated,
     job?.skipped,
+    job?.chatsImported,
+    job?.addressBookImported,
+    job?.warning,
     job?.errorMessage,
     queryClient,
   ]);
@@ -190,23 +214,26 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
   const handleConfirmStart = useCallback(() => {
     setConfirmOpen(false);
     setStatusEnabled(true);
-    startMutation.mutate(instanceId, {
-      onSuccess: (result) => {
-        if (result.alreadyRunning) {
-          toast.info("Importação já em andamento");
-        } else {
-          toast.info("Importação iniciada");
-        }
+    startMutation.mutate(
+      { instanceId, contactScope: scope },
+      {
+        onSuccess: (result) => {
+          if (result.alreadyRunning) {
+            toast.info("Importação já em andamento");
+          } else {
+            toast.info("Importação iniciada");
+          }
+        },
+        onError: (err) => {
+          const message =
+            err instanceof ApiClientError
+              ? err.message
+              : "Falha ao iniciar importação";
+          toast.error(message);
+        },
       },
-      onError: (err) => {
-        const message =
-          err instanceof ApiClientError
-            ? err.message
-            : "Falha ao iniciar importação";
-        toast.error(message);
-      },
-    });
-  }, [instanceId, startMutation]);
+    );
+  }, [instanceId, scope, startMutation]);
 
   const handleCancel = useCallback(() => {
     cancelMutation.mutate(instanceId, {
@@ -233,7 +260,9 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
             <div className="flex items-center justify-between text-xs text-txt-secondary">
               <span className="inline-flex items-center gap-1.5">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Importando contatos…
+                {job.phase === "address_book"
+                  ? "Importando agenda..."
+                  : "Importando conversas..."}
               </span>
               <span className="font-medium">
                 {job.fetched}
@@ -261,7 +290,12 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
           </div>
         ) : (
           <button
-            onClick={() => setConfirmOpen(true)}
+            onClick={() => {
+              // Resetar pro default seguro a cada abertura — evita disparar
+              // "Todos os contatos" por inércia depois de ter mexido antes.
+              setScope("address_book");
+              setConfirmOpen(true);
+            }}
             disabled={startMutation.isPending}
             className="w-full h-9 rounded-lg border border-border-default bg-surface-card text-sm font-medium text-txt-primary hover:bg-surface-elevated transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
           >
@@ -279,11 +313,62 @@ function SyncContactsRow({ instanceId }: { instanceId: string }) {
         open={confirmOpen}
         title="Importar contatos do WhatsApp"
         description={
-          <>
-            Vai importar todos os contatos das conversas deste número. Contatos
-            já existentes mantêm o nome editado; foto de perfil é atualizada.
-            Pode levar alguns minutos.
-          </>
+          <div className="space-y-3">
+            <p>
+              Vai importar contatos deste número pro CRM. Contatos já existentes
+              mantêm o nome editado; foto de perfil é atualizada quando houver.
+              Pode levar alguns minutos.
+            </p>
+            <div
+              role="radiogroup"
+              aria-labelledby={`sync-scope-label-${instanceId}`}
+              className="space-y-2"
+            >
+              <p
+                id={`sync-scope-label-${instanceId}`}
+                className="text-sm font-medium text-txt-primary"
+              >
+                O que importar?
+              </p>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`sync-scope-${instanceId}`}
+                  value="address_book"
+                  checked={scope === "address_book"}
+                  onChange={() => setScope("address_book")}
+                  className="mt-1"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-txt-primary">
+                    Só contatos salvos
+                  </span>
+                  <span className="block text-xs text-txt-muted">
+                    Inclui apenas quem você salvou na agenda do celular.
+                  </span>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name={`sync-scope-${instanceId}`}
+                  value="all"
+                  checked={scope === "all"}
+                  onChange={() => setScope("all")}
+                  className="mt-1"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-txt-primary">
+                    Todos os contatos
+                  </span>
+                  <span className="block text-xs text-txt-muted">
+                    Inclui também números não-salvos (de grupos, etc.). Pode
+                    importar muito mais.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
         }
         confirmLabel="Importar"
         cancelLabel="Cancelar"

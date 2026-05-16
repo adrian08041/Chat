@@ -8,16 +8,22 @@ import { randomUUID } from "node:crypto";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { upsertContactFromInbound } from "@/lib/services/contact.service";
-import { getUazApiClient } from "@/lib/uazapi";
+import {
+  type ContactScope,
+  getUazApiClient,
+  type UazApiClient,
+  type UazApiInstanceCredentials,
+} from "@/lib/uazapi";
 import { stripJidSuffix } from "@/lib/whatsapp/normalize";
 import type { SyncJob } from "@/types/instance-sync";
 
 export type { SyncJob, SyncJobStatus } from "@/types/instance-sync";
 
-const PAGE_SIZE = 200;
-const SORT = "-wa_lastMsgTimestamp";
-// Jobs terminais (done/error/cancelled) ficam no Map por TTL_MS pra que o
-// client busque o estado final, depois somem pra não vazar memória.
+const PAGE_SIZE_CHATS = 200;
+const PAGE_SIZE_CONTACTS = 500;
+const SORT_CHATS = "-wa_lastMsgTimestamp";
+// Jobs terminais ficam no Map por TTL_MS pra que o client busque o estado
+// final, depois somem pra não vazar memória.
 const TTL_MS = 10 * 60 * 1000;
 
 // Estado interno acrescenta a flag `cancelled` (sinal entre cancelSyncContacts
@@ -42,26 +48,36 @@ function jobKey(workspaceId: string, instanceId: string): string {
 export async function startSyncContacts(params: {
   workspaceId: string;
   instanceId: string;
+  contactScope?: ContactScope;
 }): Promise<{ job: SyncJob; alreadyRunning: boolean }> {
   const key = jobKey(params.workspaceId, params.instanceId);
   const existing = jobs.get(key);
   if (existing && existing.status === "running") {
+    // Não troca scope no meio do caminho — retorna o em curso.
     return { job: toPublicJob(existing), alreadyRunning: true };
   }
 
+  const contactScope: ContactScope = params.contactScope ?? "address_book";
+
   // Reserva o slot ANTES do primeiro await pra fechar a janela de race entre
-  // dois requests concorrentes na mesma instance. JS single-threaded garante
-  // que o Map.set acontece sem interleave com outro Map.get desta função.
+  // dois requests concorrentes na mesma instance.
   const job: InternalSyncJob = {
     id: randomUUID(),
     workspaceId: params.workspaceId,
     instanceId: params.instanceId,
     status: "running",
+    phase: "chats",
     fetched: 0,
     total: 0,
     imported: 0,
     updated: 0,
     skipped: 0,
+    chatsImported: 0,
+    chatsUpdated: 0,
+    addressBookImported: 0,
+    addressBookUpdated: 0,
+    warning: null,
+    contactScope,
     startedAt: Date.now(),
     finishedAt: null,
     errorMessage: null,
@@ -128,85 +144,50 @@ export function cancelSyncContacts(params: {
 
 async function runJob(
   job: InternalSyncJob,
-  creds: { subdomain: string; token: string },
+  creds: UazApiInstanceCredentials,
 ): Promise<void> {
   const client = getUazApiClient();
   const key = jobKey(job.workspaceId, job.instanceId);
   try {
-    let offset = 0;
-    while (true) {
-      if (job.cancelled) break;
+    // FASE 1 — /chat/find. Falha aqui vira `error`.
+    job.phase = "chats";
+    await runChatsPhase(job, creds, client);
+    if (job.cancelled) {
+      job.status = "cancelled";
+      console.info(
+        `[instance-sync] cancelled (phase 1) workspace=${job.workspaceId} instance=${job.instanceId} imported=${job.imported} updated=${job.updated} skipped=${job.skipped}`,
+      );
+      return;
+    }
 
-      const result = await client.listChats(creds, {
-        limit: PAGE_SIZE,
-        offset,
-        sort: SORT,
-      });
-
-      if (result.pagination.totalRecords > 0) {
-        job.total = result.pagination.totalRecords;
-      }
-
-      for (const chat of result.chats) {
-        if (job.cancelled) break;
-        if (chat.wa_isGroup) {
-          job.skipped++;
-          continue;
-        }
-        const phone = chat.phone ?? stripJidSuffix(chat.wa_chatid);
-        if (!phone) {
-          job.skipped++;
-          continue;
-        }
-        const fallbackName =
-          chat.wa_contactName ?? chat.wa_name ?? chat.name ?? null;
-        const avatarUrl = chat.image ?? null;
-
-        try {
-          const { created } = await upsertContactFromInbound({
-            workspaceId: job.workspaceId,
-            phone,
-            fallbackName,
-            avatarUrl,
-          });
-          if (created) {
-            job.imported++;
-          } else {
-            job.updated++;
-          }
-        } catch (err) {
-          console.error(
-            `[instance-sync] upsert falhou phone=${phone}`,
-            err,
-          );
-          job.skipped++;
-        }
-      }
-
-      job.fetched += result.chats.length;
-
-      const reachedEnd = result.chats.length < PAGE_SIZE;
-      const reachedTotal =
-        result.pagination.totalRecords > 0 &&
-        job.fetched >= result.pagination.totalRecords;
-      if (reachedEnd || reachedTotal) break;
-      offset += PAGE_SIZE;
+    // FASE 2 — /contacts/list. Falha aqui vira `done + warning`,
+    // preservando o resultado da fase 1.
+    job.phase = "address_book";
+    try {
+      await runAddressBookPhase(job, creds, client);
+    } catch (phase2Err) {
+      const msg =
+        phase2Err instanceof Error ? phase2Err.message : String(phase2Err);
+      job.warning = `Falhei ao importar agenda: ${msg}`;
+      console.warn(
+        `[instance-sync] phase2 failed (degraded done) workspace=${job.workspaceId} instance=${job.instanceId}`,
+        phase2Err,
+      );
     }
 
     job.status = job.cancelled ? "cancelled" : "done";
-    job.finishedAt = Date.now();
     console.info(
-      `[instance-sync] ${job.status} workspace=${job.workspaceId} instance=${job.instanceId} imported=${job.imported} updated=${job.updated} skipped=${job.skipped}`,
+      `[instance-sync] ${job.status} workspace=${job.workspaceId} instance=${job.instanceId} chats=${job.chatsImported}+${job.chatsUpdated} address_book=${job.addressBookImported}+${job.addressBookUpdated} skipped=${job.skipped}${job.warning ? ` warning="${job.warning}"` : ""}`,
     );
   } catch (err) {
     job.status = "error";
     job.errorMessage = err instanceof Error ? err.message : String(err);
-    job.finishedAt = Date.now();
     console.error(
       `[instance-sync] FAIL workspace=${job.workspaceId} instance=${job.instanceId}`,
       err,
     );
   } finally {
+    job.finishedAt = Date.now();
     // TTL: remove o job do Map depois do client ter tempo de buscar o estado
     // final. Guard por job.id evita apagar uma execução posterior que tenha
     // sobrescrito a entrada na mesma chave workspace:instance.
@@ -216,4 +197,149 @@ async function runJob(
     }, TTL_MS);
     timer.unref?.();
   }
+}
+
+async function runChatsPhase(
+  job: InternalSyncJob,
+  creds: UazApiInstanceCredentials,
+  client: UazApiClient,
+): Promise<void> {
+  let offset = 0;
+  while (true) {
+    if (job.cancelled) break;
+
+    const result = await client.listChats(creds, {
+      limit: PAGE_SIZE_CHATS,
+      offset,
+      sort: SORT_CHATS,
+    });
+
+    if (result.pagination.totalRecords > 0) {
+      job.total = result.pagination.totalRecords;
+    }
+
+    for (const chat of result.chats) {
+      if (job.cancelled) break;
+      if (chat.wa_isGroup) {
+        job.skipped++;
+        continue;
+      }
+      const phone = chat.phone ?? stripJidSuffix(chat.wa_chatid);
+      if (!phone) {
+        job.skipped++;
+        continue;
+      }
+      const fallbackName =
+        chat.wa_contactName ?? chat.wa_name ?? chat.name ?? null;
+      const avatarUrl = chat.image ?? null;
+
+      try {
+        const { created } = await upsertContactFromInbound({
+          workspaceId: job.workspaceId,
+          phone,
+          fallbackName,
+          avatarUrl,
+        });
+        if (created) {
+          job.chatsImported++;
+        } else {
+          job.chatsUpdated++;
+        }
+        recomputeAggregates(job);
+      } catch (err) {
+        console.error(
+          `[instance-sync] upsert (chats) falhou phone=${phone}`,
+          err,
+        );
+        job.skipped++;
+      }
+    }
+
+    job.fetched += result.chats.length;
+
+    const reachedEnd = result.chats.length < PAGE_SIZE_CHATS;
+    const reachedTotal =
+      result.pagination.totalRecords > 0 &&
+      job.fetched >= result.pagination.totalRecords;
+    if (reachedEnd || reachedTotal) break;
+    offset += PAGE_SIZE_CHATS;
+  }
+}
+
+async function runAddressBookPhase(
+  job: InternalSyncJob,
+  creds: UazApiInstanceCredentials,
+  client: UazApiClient,
+): Promise<void> {
+  // Snapshot do total da fase 1, antes de qualquer write em job.total na fase 2.
+  const chatsTotalSnapshot = job.total;
+  let offset = 0;
+
+  while (true) {
+    if (job.cancelled) break;
+
+    const result = await client.listContacts(creds, {
+      limit: PAGE_SIZE_CONTACTS,
+      offset,
+      contactScope: job.contactScope,
+    });
+
+    if (result.pagination.totalRecords > 0) {
+      job.total = chatsTotalSnapshot + result.pagination.totalRecords;
+    }
+
+    for (const contact of result.contacts) {
+      if (job.cancelled) break;
+
+      // Grupo (`@g.us`) não vira contato.
+      if (contact.jid.endsWith("@g.us")) {
+        job.skipped++;
+        continue;
+      }
+
+      const phone = stripJidSuffix(contact.jid);
+      if (!phone) {
+        job.skipped++;
+        continue;
+      }
+
+      const fallbackName =
+        contact.contact_name ?? contact.contact_FirstName ?? null;
+
+      try {
+        const { created } = await upsertContactFromInbound({
+          workspaceId: job.workspaceId,
+          phone,
+          fallbackName,
+          avatarUrl: null, // /contacts/list não retorna foto.
+        });
+        if (created) {
+          job.addressBookImported++;
+        } else {
+          job.addressBookUpdated++;
+        }
+        recomputeAggregates(job);
+      } catch (err) {
+        console.error(
+          `[instance-sync] upsert (address_book) falhou phone=${phone}`,
+          err,
+        );
+        job.skipped++;
+      }
+    }
+
+    job.fetched += result.contacts.length;
+
+    const reachedEnd = result.contacts.length < PAGE_SIZE_CONTACTS;
+    const reachedTotal =
+      result.pagination.totalRecords > 0 &&
+      job.fetched >= chatsTotalSnapshot + result.pagination.totalRecords;
+    if (reachedEnd || reachedTotal) break;
+    offset += PAGE_SIZE_CONTACTS;
+  }
+}
+
+function recomputeAggregates(job: InternalSyncJob): void {
+  job.imported = job.chatsImported + job.addressBookImported;
+  job.updated = job.chatsUpdated + job.addressBookUpdated;
 }

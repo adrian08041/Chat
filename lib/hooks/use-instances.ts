@@ -9,6 +9,9 @@ import {
 import { apiFetch } from "@/lib/api-client";
 import type { ConnectInstanceResult, WhatsAppInstance } from "@/types/instance";
 import type { SyncJob } from "@/types/instance-sync";
+import type { ContactScope } from "@/lib/uazapi";
+
+export type { ContactScope };
 
 export const INSTANCES_QUERY_KEY: QueryKey = ["instances"];
 
@@ -127,15 +130,23 @@ export function useSyncContactsStatus(
   });
 }
 
+export type StartSyncContactsInput = {
+  instanceId: string;
+  contactScope: ContactScope;
+};
+
 export function useStartSyncContacts() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (instanceId: string) =>
+    mutationFn: ({ instanceId, contactScope }: StartSyncContactsInput) =>
       apiFetch<{ job: SyncJob; alreadyRunning: boolean }>(
         `/api/instances/${instanceId}/sync-contacts`,
-        { method: "POST" },
+        {
+          method: "POST",
+          body: JSON.stringify({ contactScope }),
+        },
       ),
-    onSuccess: (data, instanceId) => {
+    onSuccess: (data, { instanceId }) => {
       // Atualiza cache do status imediatamente — UI já mostra running sem esperar polling.
       queryClient.setQueryData(["instances", instanceId, "sync-contacts"], {
         job: data.job,

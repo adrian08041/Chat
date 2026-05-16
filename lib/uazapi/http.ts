@@ -10,10 +10,13 @@ import {
   type InstanceStatusResult,
   type ListChatsParams,
   type ListChatsResult,
+  type ListContactsParams,
+  type ListContactsResult,
   type SendMediaParams,
   type SendResult,
   type SendTextParams,
   type SetWebhookParams,
+  type UazApiAddressBookContact,
   type UazApiChat,
   type UazApiClient,
   type UazApiInstanceCredentials,
@@ -82,6 +85,23 @@ function toNumberCheck(raw: Record<string, unknown>): UazApiNumberCheck {
     verifiedName: pickString(raw, "verifiedName"),
     groupName: pickString(raw, "groupName"),
     error: pickString(raw, "error"),
+  };
+}
+
+function toUazApiAddressBookContact(
+  raw: Record<string, unknown>,
+): UazApiAddressBookContact | null {
+  const jid = pickString(raw, "jid");
+  if (!jid) return null;
+  return {
+    jid,
+    contact_name: pickString(raw, "contact_name", "contactName"),
+    contact_FirstName: pickString(
+      raw,
+      "contact_FirstName",
+      "contact_firstName",
+      "contactFirstName",
+    ),
   };
 }
 
@@ -323,6 +343,42 @@ export class HttpUazApiClient implements UazApiClient {
     return {
       chats,
       pagination: { totalRecords, limit, offset },
+    };
+  }
+
+  async listContacts(
+    creds: UazApiInstanceCredentials,
+    params: ListContactsParams,
+  ): Promise<ListContactsResult> {
+    const result = await this.instanceRequest(creds, "/contacts/list", {
+      method: "POST",
+      body: {
+        limit: params.limit,
+        offset: params.offset,
+        contactScope: params.contactScope,
+      },
+    });
+
+    const rawContacts = pick(result, "contacts");
+    const contacts: UazApiAddressBookContact[] = Array.isArray(rawContacts)
+      ? rawContacts
+          .filter(isObject)
+          .map(toUazApiAddressBookContact)
+          .filter((c): c is UazApiAddressBookContact => c !== null)
+      : [];
+
+    const pagination = pick(result, "pagination");
+    const totalRecords =
+      pickNumber(pagination, "totalRecords") ?? contacts.length;
+    const limit = pickNumber(pagination, "limit") ?? params.limit;
+    const offset = pickNumber(pagination, "offset") ?? params.offset;
+
+    const totalDeviceContacts = pickNumber(result, "totalDeviceContacts") ?? 0;
+
+    return {
+      contacts,
+      pagination: { totalRecords, limit, offset },
+      totalDeviceContacts,
     };
   }
 

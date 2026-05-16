@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { z } from "zod";
 import { requireAuth } from "@/lib/api-auth";
 import { handleRouteError, ok } from "@/lib/api-utils";
 import {
@@ -9,15 +10,29 @@ import {
 
 type RouteContext = { params: Promise<{ id: string }> };
 
+// API expõe só dois valores do toggle. O service permite "outside_address_book"
+// internamente; deixar fora do contrato HTTP até virar requisito.
+const StartBodySchema = z
+  .object({
+    contactScope: z.enum(["address_book", "all"]).optional(),
+  })
+  .optional();
+
 // POST inicia o sync (idempotente: se já tem job running pra mesma instance,
 // retorna o existente com alreadyRunning=true). Qualquer role do workspace.
-export async function POST(_request: NextRequest, ctx: RouteContext) {
+export async function POST(request: NextRequest, ctx: RouteContext) {
   try {
     const session = await requireAuth();
     const { id } = await ctx.params;
+
+    // Body é opcional — request sem body cai no default address_book.
+    const raw = await request.text();
+    const parsed = raw ? StartBodySchema.parse(JSON.parse(raw)) : undefined;
+
     const result = await startSyncContacts({
       workspaceId: session.user.workspaceId,
       instanceId: id,
+      contactScope: parsed?.contactScope,
     });
     return ok(result);
   } catch (error) {
