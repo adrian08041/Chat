@@ -8,6 +8,7 @@ import type { ConversationNote, User } from "@prisma/client";
 import { ApiError } from "@/lib/api-utils";
 import { prisma } from "@/lib/prisma";
 import { publish } from "@/lib/realtime";
+import { notifyMention } from "@/lib/services/notification.service";
 import { appendEvent } from "./conversation.service";
 
 export type NoteDTO = {
@@ -16,6 +17,7 @@ export type NoteDTO = {
   userId: string;
   userName: string;
   content: string;
+  mentionedUserIds: string[];
   createdAt: string;
 };
 
@@ -28,6 +30,7 @@ function toNoteDTO(
     userId: note.userId,
     userName: note.user.name,
     content: note.content,
+    mentionedUserIds: note.mentionedUserIds,
     createdAt: note.createdAt.toISOString(),
   };
 }
@@ -74,6 +77,7 @@ export type CreateNoteInput = {
   userId: string;
   isManager: boolean;
   content: string;
+  mentionedUserIds?: string[];
 };
 
 export async function createConversationNote(
@@ -84,15 +88,41 @@ export async function createConversationNote(
     throw new ApiError("Nota não pode ficar vazia", 422);
   }
 
+  // Filtra IDs válidos: workspace match + ativos. IDs inválidos viram noise
+  // de log e somem silenciosamente — cliente já validou pela lista cacheada.
+  const rawIds = Array.from(new Set(input.mentionedUserIds ?? []));
+  let validIds: string[] = [];
+  if (rawIds.length > 0) {
+    const validUsers = await prisma.user.findMany({
+      where: {
+        id: { in: rawIds },
+        workspaceId: input.workspaceId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    validIds = validUsers.map((u) => u.id);
+    if (validIds.length !== rawIds.length) {
+      console.warn(
+        "[note] mentionedUserIds descartados:",
+        rawIds.filter((id) => !validIds.includes(id)),
+      );
+    }
+  }
+
   // Access check + create + event na mesma tx fecha a corrida contra
   // transferência concorrente da conversa entre o check e o create.
+  let contactName = "Novo contato";
   const { note, assignedUserId } = await prisma.$transaction(async (tx) => {
     const conv = await tx.conversation.findFirst({
       where: {
         id: input.conversationId,
         workspaceId: input.workspaceId,
       },
-      select: { assignedUserId: true },
+      select: {
+        assignedUserId: true,
+        contact: { select: { name: true } },
+      },
     });
     if (!conv) {
       throw new ApiError("Conversa não encontrada", 404);
@@ -106,6 +136,7 @@ export async function createConversationNote(
         conversationId: input.conversationId,
         userId: input.userId,
         content,
+        mentionedUserIds: validIds,
       },
       include: { user: { select: { id: true, name: true } } },
     });
@@ -115,6 +146,7 @@ export async function createConversationNote(
       actorId: input.userId,
       payload: { noteId: created.id },
     });
+    contactName = conv.contact?.name ?? "Novo contato";
     return { note: created, assignedUserId: conv.assignedUserId };
   });
 
@@ -124,9 +156,20 @@ export async function createConversationNote(
     visibility: { assignedUserId },
   });
 
-  // TODO PR #7b: detectar @menções estruturadas em `content` e disparar
-  // notifyMention(...) pros usuários mencionados. Detecção e UI de menção
-  // ficam no PR #7b — gancho deixado aqui de propósito.
+  if (validIds.length > 0) {
+    const actor = await prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { name: true },
+    });
+    void notifyMention({
+      workspaceId: input.workspaceId,
+      conversationId: input.conversationId,
+      mentionedUserIds: validIds,
+      actorId: input.userId,
+      actorName: actor?.name ?? null,
+      contactName,
+    });
+  }
 
   return toNoteDTO(note);
 }

@@ -11,6 +11,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 
 const postSchema = z.object({
   content: z.string().trim().min(1, "Conteúdo obrigatório").max(4000),
+  mentionedUserIds: z.array(z.string()).max(20).optional(),
 });
 
 export async function GET(_request: NextRequest, ctx: RouteContext) {
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest, ctx: RouteContext) {
       userId: actorId,
       isManager,
       content: body.content,
+      mentionedUserIds: body.mentionedUserIds,
     });
     return ok(note, { status: 201 });
   } catch (error) {

@@ -433,11 +433,12 @@ model ConversationTag {
 // ============================================================================
 
 model ConversationNote {
-  id             String   @id @default(cuid())
-  conversationId String
-  userId         String
-  content        String   @db.Text
-  createdAt      DateTime @default(now())
+  id               String   @id @default(cuid())
+  conversationId   String
+  userId           String
+  content          String   @db.Text
+  mentionedUserIds String[] @default([])
+  createdAt        DateTime @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id])
   user         User         @relation(fields: [userId], references: [id])

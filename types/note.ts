@@ -4,5 +4,6 @@ export interface InternalNote {
   userId: string;
   userName: string;
   content: string;
+  mentionedUserIds: string[];
   createdAt: string;
 }

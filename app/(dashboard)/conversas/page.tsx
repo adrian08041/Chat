@@ -158,15 +158,18 @@ export default function ConversationsPage() {
   );
 
   const handleAddNote = useCallback(
-    (content: string) => {
+    (content: string, mentionedUserIds: string[]) => {
       if (!selectedConversationId) return;
-      addNoteMutation.mutate(content, {
-        onSuccess: () => toast.success("Nota adicionada"),
-        onError: (err) =>
-          toast.error(
-            err instanceof ApiClientError ? err.message : "Falha ao adicionar nota",
-          ),
-      });
+      addNoteMutation.mutate(
+        { content, mentionedUserIds },
+        {
+          onSuccess: () => toast.success("Nota adicionada"),
+          onError: (err) =>
+            toast.error(
+              err instanceof ApiClientError ? err.message : "Falha ao adicionar nota",
+            ),
+        },
+      );
     },
     [selectedConversationId, addNoteMutation],
   );

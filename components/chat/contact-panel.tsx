@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { Phone, Video, MapPin, Calendar, Clock, UserCircle, ArrowRightLeft, CheckCircle2, UserPlus, RotateCcw, Trash2 } from "lucide-react";
 import { AvatarInitials } from "./avatar-initials";
+import { NoteContent } from "./note-content";
+import { NoteEditor } from "./note-editor";
 import { TransferConversationSheet } from "./transfer-conversation-sheet";
 import { ConversationTags } from "./conversation-tags";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -30,7 +32,7 @@ interface ContactPanelProps {
   canTransfer: boolean;
   canAssumeSelf: boolean;
   isMutating?: boolean;
-  onAddNote: (content: string) => void;
+  onAddNote: (content: string, mentionedUserIds: string[]) => void;
   onDeleteNote?: (noteId: string) => void;
   onAssumeConversation: () => void;
   onResolveConversation: () => void;
@@ -106,18 +108,27 @@ export function ContactPanel({
   onReopenConversation,
   onTransferConversation,
 }: ContactPanelProps) {
-  const [noteDraft, setNoteDraft] = useState("");
+  const [draftContent, setDraftContent] = useState("");
+  const [draftMentionIds, setDraftMentionIds] = useState<string[]>([]);
   const [transferOpen, setTransferOpen] = useState(false);
   const [confirmResolveOpen, setConfirmResolveOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<InternalNote | null>(null);
 
-  const trimmedNote = noteDraft.trim();
+  const handleEditorChange = useCallback(
+    (content: string, mentionedUserIds: string[]) => {
+      setDraftContent(content);
+      setDraftMentionIds(mentionedUserIds);
+    },
+    [],
+  );
 
-  const handleAddNote = useCallback(() => {
-    if (!trimmedNote) return;
-    onAddNote(trimmedNote);
-    setNoteDraft("");
-  }, [trimmedNote, onAddNote]);
+  const handleSubmitNote = useCallback(() => {
+    const trimmed = draftContent.trim();
+    if (!trimmed) return;
+    onAddNote(trimmed, draftMentionIds);
+    setDraftContent("");
+    setDraftMentionIds([]);
+  }, [draftContent, draftMentionIds, onAddNote]);
 
   const handleConfirmDeleteNote = useCallback(() => {
     if (!noteToDelete || !onDeleteNote) return;
@@ -186,22 +197,13 @@ export function ContactPanel({
         </h4>
 
         <div className="space-y-3">
-          <div className="flex flex-col gap-2">
-            <textarea
-              value={noteDraft}
-              onChange={(e) => setNoteDraft(e.target.value)}
-              placeholder="Adicionar nota interna..."
-              aria-label="Adicionar nota interna"
-              className="w-full h-20 p-3 rounded-xl bg-surface-elevated border border-border-subtle text-sm text-txt-primary placeholder:text-txt-muted focus:outline-none focus:ring-2 focus:ring-primary-400 resize-none font-body transition-all"
-            />
-            <button
-              onClick={handleAddNote}
-              disabled={!trimmedNote || isAddingNote}
-              className="self-end h-9 px-4 rounded-lg bg-primary-600 text-txt-on-primary text-sm font-body font-medium hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isAddingNote ? "Salvando..." : "Adicionar"}
-            </button>
-          </div>
+          <NoteEditor
+            value={draftContent}
+            onChange={handleEditorChange}
+            onSubmit={handleSubmitNote}
+            submitting={isAddingNote}
+            placeholder="Adicionar nota interna..."
+          />
 
           {notesLoading && (
             <p className="text-xs text-txt-muted font-body">Carregando notas...</p>
@@ -251,9 +253,10 @@ export function ContactPanel({
                     )}
                   </div>
                 </div>
-                <p className="text-xs text-txt-secondary font-body leading-relaxed whitespace-pre-wrap">
-                  {note.content}
-                </p>
+                <NoteContent
+                  content={note.content}
+                  className="text-xs font-body leading-relaxed"
+                />
               </div>
             );
           })}

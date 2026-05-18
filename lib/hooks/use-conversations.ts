@@ -204,7 +204,7 @@ export function useConversationNotes(conversationId: string | null) {
 export function useAddNote(conversationId: string | null) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (content: string) => {
+    mutationFn: (input: { content: string; mentionedUserIds?: string[] }) => {
       if (!conversationId) {
         throw new Error("Conversa não selecionada");
       }
@@ -212,7 +212,7 @@ export function useAddNote(conversationId: string | null) {
         `/api/conversations/${conversationId}/notes`,
         {
           method: "POST",
-          body: JSON.stringify({ content }),
+          body: JSON.stringify(input),
         },
       );
     },

@@ -112,3 +112,33 @@ export async function notifyNumberDisconnected(params: {
     console.error("[notification] notifyNumberDisconnected falhou:", err);
   }
 }
+
+// MENTION — fan-out pros IDs mencionados. Os IDs já vêm validados/filtrados
+// pelo note.service (workspace + não-deletados). Skip self-mention.
+export async function notifyMention(params: {
+  workspaceId: string;
+  conversationId: string;
+  mentionedUserIds: string[];
+  actorId: string;
+  actorName: string | null;
+  contactName: string;
+}): Promise<void> {
+  try {
+    const recipients = params.mentionedUserIds.filter(
+      (id) => id !== params.actorId,
+    );
+    for (const recipientUserId of recipients) {
+      await createNotification({
+        workspaceId: params.workspaceId,
+        recipientUserId,
+        type: "MENTION",
+        title: "Você foi mencionado em uma nota",
+        description: `${params.actorName ?? "Alguém"} te mencionou em ${params.contactName}`,
+        actionUrl: `/conversas?selected=${params.conversationId}`,
+        actorName: params.actorName,
+      });
+    }
+  } catch (err) {
+    console.error("[notification] notifyMention falhou:", err);
+  }
+}
